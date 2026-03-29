@@ -1,0 +1,50 @@
+{
+  "name": "@foundrydb/sdk",
+  "version": "0.1.0",
+  "description": "JavaScript/TypeScript SDK for the FoundryDB managed database platform",
+  "keywords": [
+    "foundrydb",
+    "managed-database",
+    "postgresql",
+    "mysql",
+    "mongodb",
+    "valkey",
+    "kafka"
+  ],
+  "homepage": "https://foundrydb.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anorph/foundrydb-sdk-js.git"
+  },
+  "license": "MIT",
+  "author": "Anorph",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/cjs/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/cjs/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc && node scripts/build-cjs.mjs",
+    "build:esm": "tsc",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^5.4.5"
+  }
+}
