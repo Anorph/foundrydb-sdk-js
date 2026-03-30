@@ -133,7 +133,7 @@ Supported `databaseType` values:
 | `mongodb` | 6.0, 7.0, 8.0 |
 | `valkey` | 7.2, 8.0, 8.1, 9.0 |
 | `kafka` | 3.6, 3.7, 3.8, 3.9, 4.0 |
-| `opensearch` | 2.19 |
+| `opensearch: 2 |
 | `mssql` | 4.8 |
 
 ### Database Users and Credentials
