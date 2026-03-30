@@ -4,6 +4,7 @@ import { ServicesAPI } from './services.js'
 import { UsersAPI } from './users.js'
 import { BackupsAPI } from './backups.js'
 import { MonitoringAPI } from './monitoring.js'
+import { OrganizationsAPI } from './organizations.js'
 
 /**
  * Internal HTTP client used by all API modules.
@@ -12,12 +13,15 @@ export class HTTPClient {
   private readonly baseUrl: string
   private readonly authHeader: string
   private readonly timeoutMs: number
+  /** Default organization ID applied to all requests as X-Active-Org-ID. */
+  readonly defaultOrganizationId: string | undefined
 
   constructor(config: FoundryDBConfig) {
     this.baseUrl = config.apiUrl.replace(/\/$/, '')
     this.authHeader =
       'Basic ' + Buffer.from(`${config.username}:${config.password}`).toString('base64')
     this.timeoutMs = config.timeoutMs ?? 30_000
+    this.defaultOrganizationId = config.organizationId
   }
 
   async request<T>(
@@ -25,6 +29,7 @@ export class HTTPClient {
     path: string,
     body?: unknown,
     query?: Record<string, string | number | undefined>,
+    organizationId?: string,
   ): Promise<T> {
     let url = `${this.baseUrl}${path}`
 
@@ -37,10 +42,16 @@ export class HTTPClient {
       if (qs) url += `?${qs}`
     }
 
+    const effectiveOrgId = organizationId ?? this.defaultOrganizationId
+
     const headers: Record<string, string> = {
       Authorization: this.authHeader,
       'Content-Type': 'application/json',
       Accept: 'application/json',
+    }
+
+    if (effectiveOrgId) {
+      headers['X-Active-Org-ID'] = effectiveOrgId
     }
 
     const init: RequestInit = {
@@ -74,20 +85,24 @@ export class HTTPClient {
     return (await response.json()) as T
   }
 
-  async get<T>(path: string, query?: Record<string, string | number | undefined>): Promise<T> {
-    return this.request<T>('GET', path, undefined, query)
+  async get<T>(
+    path: string,
+    query?: Record<string, string | number | undefined>,
+    organizationId?: string,
+  ): Promise<T> {
+    return this.request<T>('GET', path, undefined, query, organizationId)
   }
 
-  async post<T>(path: string, body?: unknown): Promise<T> {
-    return this.request<T>('POST', path, body)
+  async post<T>(path: string, body?: unknown, organizationId?: string): Promise<T> {
+    return this.request<T>('POST', path, body, undefined, organizationId)
   }
 
-  async patch<T>(path: string, body: unknown): Promise<T> {
-    return this.request<T>('PATCH', path, body)
+  async patch<T>(path: string, body: unknown, organizationId?: string): Promise<T> {
+    return this.request<T>('PATCH', path, body, undefined, organizationId)
   }
 
-  async delete<T = void>(path: string): Promise<T> {
-    return this.request<T>('DELETE', path)
+  async delete<T = void>(path: string, organizationId?: string): Promise<T> {
+    return this.request<T>('DELETE', path, undefined, undefined, organizationId)
   }
 }
 
@@ -135,6 +150,8 @@ export function toSnake<T>(obj: unknown): T {
  *   apiUrl: 'https://api.foundrydb.com',
  *   username: 'admin',
  *   password: 'admin',
+ *   // Optionally scope all requests to a specific organization:
+ *   organizationId: 'org_abc123',
  * })
  *
  * const { services } = await client.services.list()
@@ -145,6 +162,7 @@ export class FoundryDB {
   readonly users: UsersAPI
   readonly backups: BackupsAPI
   readonly monitoring: MonitoringAPI
+  readonly organizations: OrganizationsAPI
 
   constructor(config: FoundryDBConfig) {
     const http = new HTTPClient(config)
@@ -152,5 +170,6 @@ export class FoundryDB {
     this.users = new UsersAPI(http)
     this.backups = new BackupsAPI(http)
     this.monitoring = new MonitoringAPI(http)
+    this.organizations = new OrganizationsAPI(http)
   }
 }

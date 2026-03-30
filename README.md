@@ -36,6 +36,48 @@ console.log(services)
 
 ## Usage
 
+### Organizations
+
+```typescript
+// List all organizations the current user belongs to
+const { organizations } = await client.organizations.list()
+console.log(organizations)
+// [{ id: 'org_abc', name: 'My Team', slug: 'my-team', isPersonal: false, createdAt: '...' }]
+
+// Get a specific organization
+const org = await client.organizations.get('org_abc')
+```
+
+You can scope the entire client to an organization so that every service call automatically sends `X-Active-Org-ID`:
+
+```typescript
+const client = new FoundryDB({
+  apiUrl: 'https://api.foundrydb.com',
+  username: 'admin',
+  password: 'admin',
+  organizationId: 'org_abc123',  // applied to all requests
+})
+```
+
+Or override the organization on a per-call basis:
+
+```typescript
+// List services in a specific org (overrides client-level default)
+const { services } = await client.services.list({ organizationId: 'org_xyz' })
+
+// Create a service in a specific org
+const service = await client.services.create({
+  name: 'my-pg',
+  databaseType: 'postgresql',
+  version: '17',
+  planName: 'tier-2',
+  zone: 'se-sto1',
+  storageSizeGb: 50,
+  storageTier: 'maxiops',
+  organizationId: 'org_xyz',  // per-request override
+})
+```
+
 ### Services
 
 ```typescript
@@ -54,6 +96,22 @@ const service = await client.services.create({
 })
 console.log('Created:', service.id, service.status)
 
+// Create a multi-node HA PostgreSQL cluster
+const haService = await client.services.create({
+  name: 'my-pg-ha',
+  databaseType: 'postgresql',
+  version: '17',
+  planName: 'tier-4',
+  zone: 'se-sto1',
+  storageSizeGb: 100,
+  storageTier: 'maxiops',
+  nodeCount: 3,
+  autoFailoverEnabled: true,
+  replicationMode: 'async',
+  encryptionEnabled: true,
+  allowedCidrs: ['203.0.113.0/24'],
+})
+
 // Get a service by ID
 const svc = await client.services.get(service.id)
 
@@ -66,7 +124,17 @@ await client.services.update(service.id, {
 await client.services.delete(service.id)
 ```
 
-Supported `databaseType` values: `postgresql`, `mysql`, `mongodb`, `valkey`, `kafka`
+Supported `databaseType` values:
+
+| Type | Versions |
+|------|----------|
+| `postgresql` | 14, 15, 16, 17, 18 |
+| `mysql` | 8.4 |
+| `mongodb` | 6.0, 7.0, 8.0 |
+| `valkey` | 7.2, 8.0, 8.1, 9.0 |
+| `kafka` | 3.6, 3.7, 3.8, 3.9, 4.0 |
+| `opensearch` | 2.19 |
+| `mssql` | 4.8 |
 
 ### Database Users and Credentials
 
@@ -132,6 +200,7 @@ const client = new FoundryDB({
   username: 'admin',                    // required
   password: 'admin',                    // required
   timeoutMs: 30000,                     // optional, default 30s
+  organizationId: 'org_abc123',         // optional, scopes all requests to this org
 })
 ```
 
@@ -147,6 +216,9 @@ import type {
   RevealPasswordResponse,
   Backup,
   ServiceMetrics,
+  Organization,
+  ListOrganizationsResponse,
+  ReplicationMode,
 } from '@foundrydb/sdk'
 ```
 
