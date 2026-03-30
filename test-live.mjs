@@ -3,16 +3,16 @@ import { FoundryDB } from './dist/index.js'
 
 const BASE_URL = 'https://api.foundrydb.com'
 const USERNAME = 'admin'
-const PASSWORD = '0BYjYyWhb5MW96LVIXqE'
+const PASSWORD = 'admin'
 
 const EXPECTED_SERVICES = [
-  { id: 'a65ea369-7a0d-460f-8289-09bf031ed7fc', databaseType: 'postgresql' },
-  { id: '0f535f8e-fe90-4c61-86a6-9291e4153921', databaseType: 'mysql' },
-  { id: 'b812422b-1869-4e9c-b698-9fdfcbebf75d', databaseType: 'mongodb' },
-  { id: 'c5f66c4f-dee3-49e5-8b77-5356f875043b', databaseType: 'valkey' },
-  { id: '190d4aaf-3224-48f9-a144-d4cfe09b45e8', databaseType: 'kafka' },
-  { id: 'fd401c8a-97c5-429e-9e9d-bb503e664856', databaseType: 'opensearch' },
-  { id: '1ad021f7-a954-44a8-b829-af6501045a3e', databaseType: 'mssql' },
+  { id: '7d7d49fd-bc10-4696-98bf-0e7314897b73', databaseType: 'postgresql' },
+  { id: '9fd0b367-a58d-40e1-8a1d-f61a59ca25a8', databaseType: 'mysql' },
+  { id: 'f209c068-488e-46ad-b326-b2e938ff91a5', databaseType: 'mongodb' },
+  { id: '0f95cca8-8469-4b91-a0f3-7c98dec1520a', databaseType: 'valkey' },
+  { id: '0b8a5750-7733-4eb2-aabc-3147b447a1b9', databaseType: 'kafka' },
+  { id: 'cd1d7cd1-6be8-457d-9be0-fd3dd8dfebfe', databaseType: 'opensearch' },
+  { id: '3149d460-3a45-4f72-8217-02e946d7f5da', databaseType: 'mssql' },
 ]
 
 let passed = 0
@@ -61,7 +61,7 @@ try {
 }
 
 // ---- Test 2: services.list() - verify all 7 IDs present with status Running ----
-section('Test 2: services.list() - all 7 services present and Running')
+section('Test 2: services.list() - all 6 services present and Running')
 try {
   const result = await client.services.list()
   // SDK returns ListServicesResponse: { services: Service[] }
