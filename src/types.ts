@@ -85,11 +85,44 @@ export interface Service {
   dnsRecords?: DNSRecord[]
   allowedCidrs?: string[]
   maintenanceWindow?: string
+  isEphemeral?: boolean
+  ttlHours?: number
+  scheduledDeletionAt?: string
+  preset?: string
+  createdByAgentId?: string
+  agentFramework?: string
+  agentPurpose?: string
+  labels?: Record<string, string>
   [key: string]: unknown
 }
 
 export interface ListServicesResponse {
   services: Service[]
+}
+
+// ---- Service preset models ----
+
+export interface ServicePreset {
+  id: string
+  name: string
+  description: string
+  databaseType: string
+  defaultVersion: string
+  defaultPlan: string
+  defaultStorageGb: number
+  defaultStorageTier: string
+  configTemplateId: string
+  isEphemeral: boolean
+  defaultTtlHours: number
+  nodeCount: number
+  replicationMode?: string
+  extensions: string[]
+  recommendedFeatures: string[]
+  tags: string[]
+}
+
+export interface ListPresetsResponse {
+  presets: ServicePreset[]
 }
 
 export type ReplicationMode = 'async' | 'sync' | string
@@ -112,6 +145,20 @@ export interface CreateServiceRequest {
   replicationMode?: ReplicationMode
   /** Enable encryption at rest for the data volume. */
   encryptionEnabled?: boolean
+  /** Service preset (e.g., "agent-valkey-session"). */
+  preset?: string
+  /** Mark this service as ephemeral (auto-deleted after TTL expires). */
+  isEphemeral?: boolean
+  /** Auto-delete the service after N hours (1-720). */
+  ttlHours?: number
+  /** Identifier of the AI agent that created this service. */
+  createdByAgentId?: string
+  /** AI framework used: langchain, crewai, autogen, claude, etc. */
+  agentFramework?: string
+  /** Purpose of the service: conversation_history, session_cache, etc. */
+  agentPurpose?: string
+  /** Custom key-value labels for the service. */
+  labels?: Record<string, string>
   /**
    * Organization ID to create the service under.
    * Overrides the `organizationId` set on the client config.

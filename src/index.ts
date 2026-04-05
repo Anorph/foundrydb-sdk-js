@@ -17,6 +17,8 @@ export type {
   ListServicesResponse,
   CreateServiceRequest,
   UpdateServiceRequest,
+  ServicePreset,
+  ListPresetsResponse,
   DatabaseUser,
   ListUsersResponse,
   RevealPasswordResponse,

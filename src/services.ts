@@ -5,6 +5,7 @@ import type {
   ListServicesResponse,
   CreateServiceRequest,
   UpdateServiceRequest,
+  ListPresetsResponse,
 } from './types.js'
 
 /** Options accepted by service methods that support per-call org scoping. */
@@ -64,5 +65,16 @@ export class ServicesAPI {
    */
   async delete(serviceId: string, options?: ServiceMethodOptions): Promise<void> {
     await this.http.delete(`/managed-services/${serviceId}`, options?.organizationId)
+  }
+
+  /**
+   * List available service presets.
+   *
+   * Presets are pre-configured service templates optimised for common use
+   * cases such as AI agent session caches or conversation history stores.
+   */
+  async listPresets(options?: ServiceMethodOptions): Promise<ListPresetsResponse> {
+    const raw = await this.http.get<unknown>('/managed-services/presets', undefined, options?.organizationId)
+    return toCamel<ListPresetsResponse>(raw)
   }
 }
