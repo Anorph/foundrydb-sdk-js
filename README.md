@@ -175,6 +175,36 @@ const logs = await client.monitoring.fetchLogs(serviceId, { lines: 500 })
 console.log(logs)
 ```
 
+### Edge Gateway
+
+The edge gateway lets you attach custom domains to an app service and tune per-app cache rules, rate limiting, and WAF mode. All methods live on `client.edge`.
+
+```typescript
+// Add a custom domain (starts in pending_verification status)
+const domain = await client.edge.createAppDomain(app.id, { domain: 'app.example.com' })
+console.log(domain.cnameTarget) // point your DNS CNAME here
+
+// Trigger an immediate verification pass (the background worker also runs periodically)
+await client.edge.verifyAppDomain(app.id, domain.id)
+
+// List and remove domains
+const domains = await client.edge.listAppDomains(app.id)
+await client.edge.deleteAppDomain(app.id, domain.id)
+
+// Check edge convergence across PoPs
+const status = await client.edge.getAppEdgeStatus(app.id)
+console.log(status.edgeEnabled, status.homePop, status.configVersion)
+status.applications?.forEach(a => console.log(a.zone, a.status, a.appliedVersion))
+
+// Replace cache rules, rate limiting, and WAF mode
+const settings = await client.edge.updateAppEdgeSettings(app.id, {
+  cacheRules: [{ pathPrefix: '/static', ttlSeconds: 86400 }],
+  rateLimit: { requestsPerSecond: 100, burst: 200, key: 'ip' },
+  wafMode: 'detect',
+})
+console.log(settings.configVersion) // fleet converges on this version
+```
+
 ## Error Handling
 
 All errors from the API throw a `FoundryDBError` with `statusCode` and `body` properties:
@@ -219,6 +249,13 @@ import type {
   Organization,
   ListOrganizationsResponse,
   ReplicationMode,
+  EdgeDomain,
+  EdgeDomainStatus,
+  EdgeStatus,
+  EdgeSettings,
+  EdgeSettingsRequest,
+  EdgeCacheRule,
+  EdgeRateLimit,
 } from '@foundrydb/sdk'
 ```
 

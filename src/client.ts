@@ -6,6 +6,7 @@ import { BackupsAPI } from './backups.js'
 import { MonitoringAPI } from './monitoring.js'
 import { OrganizationsAPI } from './organizations.js'
 import { AppServicesAPI } from './app-services.js'
+import { EdgeAPI } from './edge.js'
 
 /**
  * Internal HTTP client used by all API modules.
@@ -102,6 +103,10 @@ export class HTTPClient {
     return this.request<T>('PATCH', path, body, undefined, organizationId)
   }
 
+  async put<T>(path: string, body: unknown, organizationId?: string): Promise<T> {
+    return this.request<T>('PUT', path, body, undefined, organizationId)
+  }
+
   async delete<T = void>(path: string, organizationId?: string): Promise<T> {
     return this.request<T>('DELETE', path, undefined, undefined, organizationId)
   }
@@ -165,6 +170,7 @@ export class FoundryDB {
   readonly monitoring: MonitoringAPI
   readonly organizations: OrganizationsAPI
   readonly appServices: AppServicesAPI
+  readonly edge: EdgeAPI
 
   constructor(config: FoundryDBConfig) {
     const http = new HTTPClient(config)
@@ -174,5 +180,6 @@ export class FoundryDB {
     this.monitoring = new MonitoringAPI(http)
     this.organizations = new OrganizationsAPI(http)
     this.appServices = new AppServicesAPI(http)
+    this.edge = new EdgeAPI(http)
   }
 }

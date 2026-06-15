@@ -448,6 +448,113 @@ export interface RevokeSessionResponse {
   taskId: string
 }
 
+// ---- Edge gateway models ----
+
+/**
+ * Lifecycle status of a custom domain attached to an app service through the
+ * edge tier.
+ */
+export type EdgeDomainStatus =
+  | 'pending_verification'
+  | 'verifying'
+  | 'issuing_certificate'
+  | 'propagating'
+  | 'active'
+  | 'failed'
+  | 'deleting'
+  | string
+
+/**
+ * A customer custom domain attached to an app service. The platform serves
+ * traffic for the domain from the edge tier once the status reaches active.
+ */
+export interface EdgeDomain {
+  id: string
+  serviceId: string
+  userId: string
+  domain: string
+  status: EdgeDomainStatus
+  certificateId?: string
+  verificationCheckedAt?: string
+  errorMessage?: string
+  /** Platform hostname the customer points their DNS CNAME record at. */
+  cnameTarget: string
+  createdAt: string
+  updatedAt: string
+  [key: string]: unknown
+}
+
+export interface ListEdgeDomainsResponse {
+  domains: EdgeDomain[]
+}
+
+/** Body for adding a custom domain to an app service. */
+export interface CreateEdgeDomainRequest {
+  domain: string
+}
+
+/** Selects how the edge WAF treats matching requests for one app. */
+export type EdgeWAFMode = 'off' | 'detect' | string
+
+/** Selects what a rate-limit bucket is keyed on. */
+export type EdgeRateLimitKey = 'ip' | 'api_key' | string
+
+/** Caches responses under one path prefix for a fixed TTL. */
+export interface EdgeCacheRule {
+  pathPrefix: string
+  ttlSeconds: number
+}
+
+/** Token-bucket rate limit enforced per PoP at the edge. */
+export interface EdgeRateLimit {
+  requestsPerSecond: number
+  burst: number
+  key: EdgeRateLimitKey
+}
+
+/**
+ * Customer-tunable edge settings. Domains and origin are platform-derived and
+ * are not settable here.
+ */
+export interface EdgeSettingsRequest {
+  cacheRules?: EdgeCacheRule[]
+  rateLimit?: EdgeRateLimit
+  wafMode?: EdgeWAFMode
+}
+
+/** Convergence state of one PoP in the edge fleet. */
+export interface EdgeApplicationStatusItem {
+  zone: string
+  appliedVersion: number
+  status: string
+  errorMessage?: string
+}
+
+/**
+ * Edge overview for an app service: whether the edge tier is enabled, the home
+ * PoP, the CNAME target, and how far the fleet has converged on the current
+ * config version.
+ */
+export interface EdgeStatus {
+  edgeEnabled: boolean
+  homePop?: string
+  /** Platform hostname custom domains point their CNAME at. */
+  cnameTarget?: string
+  configVersion: number
+  applications?: EdgeApplicationStatusItem[]
+}
+
+/**
+ * Customer-tunable edge settings returned after an update, plus the config
+ * version the fleet will converge on.
+ */
+export interface EdgeSettings {
+  cacheRules?: EdgeCacheRule[]
+  rateLimit?: EdgeRateLimit
+  wafMode: EdgeWAFMode
+  configVersion: number
+}
+
 // ---- Error types ----
 
 export interface APIErrorBody {

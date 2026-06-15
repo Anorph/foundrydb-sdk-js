@@ -7,6 +7,7 @@ export { MonitoringAPI } from './monitoring.js'
 export { OrganizationsAPI } from './organizations.js'
 export { AppServicesAPI } from './app-services.js'
 export type { AppServiceMethodOptions, CreateAppServiceRequest, UpdateAppServiceRequest, AttachOptions } from './app-services.js'
+export { EdgeAPI } from './edge.js'
 export { FoundryDBError } from './types.js'
 export type {
   FoundryDBConfig,
@@ -49,4 +50,16 @@ export type {
   AuthSigningKey,
   AuthConfigurationWithKeys,
   RevokeSessionResponse,
+  EdgeDomainStatus,
+  EdgeDomain,
+  ListEdgeDomainsResponse,
+  CreateEdgeDomainRequest,
+  EdgeWAFMode,
+  EdgeRateLimitKey,
+  EdgeCacheRule,
+  EdgeRateLimit,
+  EdgeSettingsRequest,
+  EdgeApplicationStatusItem,
+  EdgeStatus,
+  EdgeSettings,
 } from './types.js'
