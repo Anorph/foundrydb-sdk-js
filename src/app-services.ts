@@ -120,13 +120,19 @@ export class AppServicesAPI {
   // ---- Attachments ----
 
   /**
-   * Attach a managed database or files (object storage) service to a running
-   * app. The platform peers the private networks, opens the target's port to
-   * the app's subnet, and rolls a zero-downtime redeploy. Poll
+   * Attach a managed service to a running app. The target may be a database
+   * or another app (east-west app-to-app). The platform peers the private
+   * networks, opens the target's port to the app's subnet, and rolls a
+   * zero-downtime redeploy so the injected environment is updated: a database
+   * injects connection credentials; an app injects
+   * `MDB_<NAME>_HOST/PORT/URL` for plain-HTTP calls over the private SDN (no
+   * credentials, no `DATABASE_URL`). An app supports up to five attachments
+   * (databases and apps combined). The target must be Running, owned by the
+   * same user, in the app's peering region, and not the app itself. Poll
    * `waitForRunning` until the app returns to running.
    *
    * Pass `opts` to scope a files attachment (prefix, permission,
-   * wiringIntent); omit or pass `undefined` for a plain database attachment.
+   * wiringIntent); omit or pass `undefined` for a database or app attachment.
    */
   async attach(appServiceId: string, attachedServiceId: string, opts?: AttachOptions): Promise<AppService> {
     const body = toSnake({
