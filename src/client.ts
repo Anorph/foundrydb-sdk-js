@@ -5,6 +5,7 @@ import { UsersAPI } from './users.js'
 import { BackupsAPI } from './backups.js'
 import { MonitoringAPI } from './monitoring.js'
 import { OrganizationsAPI } from './organizations.js'
+import { AppServicesAPI } from './app-services.js'
 
 /**
  * Internal HTTP client used by all API modules.
@@ -163,6 +164,7 @@ export class FoundryDB {
   readonly backups: BackupsAPI
   readonly monitoring: MonitoringAPI
   readonly organizations: OrganizationsAPI
+  readonly appServices: AppServicesAPI
 
   constructor(config: FoundryDBConfig) {
     const http = new HTTPClient(config)
@@ -171,5 +173,6 @@ export class FoundryDB {
     this.backups = new BackupsAPI(http)
     this.monitoring = new MonitoringAPI(http)
     this.organizations = new OrganizationsAPI(http)
+    this.appServices = new AppServicesAPI(http)
   }
 }

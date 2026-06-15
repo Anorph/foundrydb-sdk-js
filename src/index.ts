@@ -5,6 +5,8 @@ export { UsersAPI } from './users.js'
 export { BackupsAPI } from './backups.js'
 export { MonitoringAPI } from './monitoring.js'
 export { OrganizationsAPI } from './organizations.js'
+export { AppServicesAPI } from './app-services.js'
+export type { AppServiceMethodOptions, CreateAppServiceRequest, UpdateAppServiceRequest, AttachOptions } from './app-services.js'
 export { FoundryDBError } from './types.js'
 export type {
   FoundryDBConfig,
@@ -33,4 +35,18 @@ export type {
   APIErrorBody,
   Organization,
   ListOrganizationsResponse,
+  AppContainerConfig,
+  AppDeployStep,
+  AppDeployment,
+  AppService,
+  AuthSmtpConfig,
+  AuthThemeConfig,
+  AuthIdpProvider,
+  AuthIdpProviderRequest,
+  AuthIdpProviderConfig,
+  AuthEnableRequest,
+  AuthConfiguration,
+  AuthSigningKey,
+  AuthConfigurationWithKeys,
+  RevokeSessionResponse,
 } from './types.js'
