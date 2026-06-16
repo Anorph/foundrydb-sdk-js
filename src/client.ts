@@ -6,7 +6,16 @@ import { BackupsAPI } from './backups.js'
 import { MonitoringAPI } from './monitoring.js'
 import { OrganizationsAPI } from './organizations.js'
 import { AppServicesAPI } from './app-services.js'
+import { AppJobsAPI } from './app-jobs.js'
 import { EdgeAPI } from './edge.js'
+import { QueuesAPI } from './queues.js'
+import { FileServicesAPI } from './file-services.js'
+import { InferenceAPI } from './inference.js'
+import { DataPipelinesAPI } from './data-pipelines.js'
+import { EmbeddingPipelinesAPI } from './embedding-pipelines.js'
+import { WebhooksAPI } from './webhooks.js'
+import { AIActionsAPI } from './ai-actions.js'
+import { VectorSearchAPI } from './vector-search.js'
 
 /**
  * Internal HTTP client used by all API modules.
@@ -170,7 +179,16 @@ export class FoundryDB {
   readonly monitoring: MonitoringAPI
   readonly organizations: OrganizationsAPI
   readonly appServices: AppServicesAPI
+  readonly appJobs: AppJobsAPI
   readonly edge: EdgeAPI
+  readonly queues: QueuesAPI
+  readonly fileServices: FileServicesAPI
+  readonly inference: InferenceAPI
+  readonly dataPipelines: DataPipelinesAPI
+  readonly embeddingPipelines: EmbeddingPipelinesAPI
+  readonly webhooks: WebhooksAPI
+  readonly aiActions: AIActionsAPI
+  readonly vectorSearch: VectorSearchAPI
 
   constructor(config: FoundryDBConfig) {
     const http = new HTTPClient(config)
@@ -180,6 +198,15 @@ export class FoundryDB {
     this.monitoring = new MonitoringAPI(http)
     this.organizations = new OrganizationsAPI(http)
     this.appServices = new AppServicesAPI(http)
+    this.appJobs = new AppJobsAPI(http)
     this.edge = new EdgeAPI(http)
+    this.queues = new QueuesAPI(http)
+    this.fileServices = new FileServicesAPI(http)
+    this.inference = new InferenceAPI(http)
+    this.dataPipelines = new DataPipelinesAPI(http)
+    this.embeddingPipelines = new EmbeddingPipelinesAPI(http)
+    this.webhooks = new WebhooksAPI(http)
+    this.aiActions = new AIActionsAPI(http)
+    this.vectorSearch = new VectorSearchAPI(http)
   }
 }

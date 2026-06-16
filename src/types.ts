@@ -555,6 +555,834 @@ export interface EdgeSettings {
   configVersion: number
 }
 
+// ---- Auth GDPR erasure types ----
+
+/**
+ * Request body for erasing one end-user (GDPR right to erasure, Art. 17).
+ * Set exactly one of `email` or `userId`.
+ */
+export interface DeleteAppServiceAuthUserRequest {
+  /** Email of the end-user to erase. Mutually exclusive with `userId`. */
+  email?: string
+  /**
+   * Auth subject UUID of the end-user to erase. Mutually exclusive with
+   * `email`.
+   */
+  userId?: string
+}
+
+/** Response returned by auth user erasure operations. */
+export interface AuthUserErasureResponse {
+  taskId: string
+}
+
+// ---- App jobs types ----
+
+/** One job definition on an app service. */
+export interface AppJob {
+  id: string
+  serviceId: string
+  name: string
+  /** Five-field cron expression. Null means the job has no schedule. */
+  scheduleCron?: string
+  timezone: string
+  enabled: boolean
+  /** Image reference override for this job; absent means inherit from the app. */
+  imageRef?: string
+  /** Container argv override (exec form). */
+  command?: string[]
+  /** Environment variables layered over the app's environment at dispatch time. */
+  env?: Record<string, string>
+  maxRetries: number
+  retryBackoffSeconds: number
+  maxRuntimeSeconds: number
+  concurrencyCap: number
+  overlapPolicy: string
+  nextRunAt?: string
+  lastRunAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** One execution (or recorded skip) of a job. */
+export interface AppJobInvocation {
+  id: string
+  jobId: string
+  serviceId: string
+  /** queued | running | succeeded | failed | timed_out | skipped */
+  status: string
+  attempt: number
+  triggeredBy: string
+  triggeredByUserId?: string
+  agentTaskId?: string
+  unitName?: string
+  scheduledFor?: string
+  queuedAt: string
+  startedAt?: string
+  finishedAt?: string
+  durationMs?: number
+  exitCode?: number
+  errorMessage?: string
+  /** Trailing log lines captured by the agent into the invocation result. */
+  logTail?: string
+  retryEnqueued: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+/** Log lines captured for one invocation. */
+export interface AppJobLogLines {
+  lines: string[]
+  logFilePath: string
+  truncatedAt?: number
+}
+
+/**
+ * Poll response for an invocation logs fetch task. Status mirrors the agent
+ * task lifecycle. `result` is set once the status is COMPLETED.
+ */
+export interface AppJobInvocationLogs {
+  taskId: string
+  /** PENDING | DISPATCHED | IN_PROGRESS | COMPLETED | FAILED | TIMEOUT | CANCELLED */
+  status: string
+  result?: AppJobLogLines
+  errorMessage?: string
+}
+
+/** Body for creating a new job definition. */
+export interface AppJobCreateRequest {
+  name: string
+  scheduleCron?: string
+  timezone?: string
+  enabled?: boolean
+  imageRef?: string
+  command?: string[]
+  env?: Record<string, string>
+  maxRetries?: number
+  retryBackoffSeconds?: number
+  maxRuntimeSeconds?: number
+  concurrencyCap?: number
+}
+
+/**
+ * Body for updating a job definition. Unset fields keep their current value.
+ * Set `clearSchedule` to `true` to remove the schedule; set `clearImageRef`
+ * to `true` to revert to the app image.
+ */
+export interface AppJobPatchRequest {
+  scheduleCron?: string
+  clearSchedule?: boolean
+  timezone?: string
+  enabled?: boolean
+  imageRef?: string
+  clearImageRef?: boolean
+  command?: string[]
+  env?: Record<string, string>
+  maxRetries?: number
+  retryBackoffSeconds?: number
+  maxRuntimeSeconds?: number
+  concurrencyCap?: number
+}
+
+// ---- Queue types ----
+
+/**
+ * A named message queue hosted on a PostgreSQL managed service. Status is one
+ * of Pending, Provisioning, Active, Deprovisioning, or Failed.
+ */
+export interface Queue {
+  id: string
+  userId: string
+  organizationId?: string
+  serviceId: string
+  name: string
+  databaseName: string
+  /**
+   * How long (seconds) a claimed message stays invisible before a crashed
+   * consumer's claim expires and the message is redelivered.
+   */
+  visibilityTimeoutSeconds: number
+  /** How many delivery attempts a message gets before it is dropped or dead-lettered. */
+  maxAttempts: number
+  dlqEnabled: boolean
+  status: string
+  errorMessage?: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** Body for creating a queue. */
+export interface QueueCreateRequest {
+  name: string
+  databaseName?: string
+  visibilityTimeoutSeconds?: number
+  maxAttempts?: number
+  dlqEnabled?: boolean
+}
+
+/** One message in a batch enqueue request. */
+export interface QueueEnqueueMessage {
+  /** Arbitrary JSON payload. */
+  payload: Record<string, unknown>
+  /** Delay first visibility by this many seconds. */
+  delaySeconds?: number
+}
+
+/** Body for enqueueing a batch of messages (up to 100 per call). */
+export interface QueueEnqueueRequest {
+  messages: QueueEnqueueMessage[]
+}
+
+/** Message IDs assigned to a completed enqueue batch, in request order. */
+export interface QueueEnqueueMessageIds {
+  messageIds: number[]
+}
+
+/**
+ * Poll response for an enqueue task. `result` holds the assigned message IDs
+ * once the status is COMPLETED.
+ */
+export interface QueueEnqueueResult {
+  taskId: string
+  status: string
+  result?: QueueEnqueueMessageIds
+}
+
+/** Per-queue depth snapshot. */
+export interface QueueStats {
+  queueName: string
+  readyMessages: number
+  inflightMessages: number
+  deadMessages: number
+  oldestAgeSeconds: number
+}
+
+/**
+ * Poll response for a queue stats task. `result` holds the depth snapshot
+ * once the status is COMPLETED.
+ */
+export interface QueueStatsResult {
+  taskId: string
+  status: string
+  result?: QueueStats
+}
+
+// ---- File service types ----
+
+/** One S3 bucket backing a files service. */
+export interface FilesBucket {
+  region: string
+  bucket: string
+  endpoint: string
+}
+
+/** Configuration and measured usage for a files service. */
+export interface FilesConfig {
+  buckets: FilesBucket[]
+  quotaGbSoft: number
+  quotaGbHard: number
+  versioning: boolean
+  sse: boolean
+  lifecycleEnabled: boolean
+  measuredBytes: number
+  measuredAt?: string
+  overQuota: boolean
+}
+
+/** A managed S3-compatible object storage service. */
+export interface FilesService {
+  id: string
+  userId: string
+  organizationId?: string
+  name: string
+  serviceKind: string
+  status: string
+  zone: string
+  filesConfig?: FilesConfig
+  createdAt: string
+  updatedAt: string
+}
+
+/** Body for provisioning a new files service. */
+export interface CreateFilesServiceRequest {
+  name: string
+  zone?: string
+  quotaGbSoft?: number
+  quotaGbHard?: number
+  organizationId?: string
+}
+
+/** One scoped S3 credential for a files service. */
+export interface FilesAccessKey {
+  id: string
+  serviceId: string
+  userId: string
+  organizationId?: string
+  name: string
+  accessKeyId: string
+  prefix: string
+  /** 'read' | 'write' | 'readwrite' */
+  permissions: string
+  /** 'user' | 'attachment' */
+  purpose: string
+  /** 'active' | 'revoked' */
+  status: string
+  lastUsedAt?: string
+  createdAt: string
+  updatedAt: string
+  revokedAt?: string
+}
+
+/**
+ * Response for `FileServicesAPI.createAccessKey`. The `secretAccessKey` is
+ * returned exactly once and cannot be retrieved again.
+ */
+export interface FilesAccessKeyWithSecret extends FilesAccessKey {
+  secretAccessKey: string
+}
+
+/** Body for minting a new access key. */
+export interface CreateFilesAccessKeyRequest {
+  name: string
+  prefix?: string
+  /** 'read' | 'write' | 'readwrite' */
+  permissions: string
+}
+
+/** Body for presigning one S3 operation. */
+export interface PresignFilesUrlRequest {
+  /** 'GET' | 'PUT' | 'HEAD' | 'DELETE' */
+  method: string
+  key: string
+  expiresSeconds?: number
+  contentType?: string
+}
+
+/** A presigned URL and its validity window. */
+export interface FilesPresignedUrl {
+  url: string
+  method: string
+  expiresAt: string
+}
+
+/** One object in a bucket listing. */
+export interface FilesObject {
+  key: string
+  size: number
+  lastModified: string
+  etag: string
+}
+
+/** One page of a bucket listing. */
+export interface FilesObjectPage {
+  objects: FilesObject[]
+  nextCursor?: string
+}
+
+// ---- Inference types ----
+
+/** API view of one configured AI provider for an organization. */
+export interface InferenceProviderConfig {
+  id: string
+  provider: string
+  baseUrl?: string
+  euEndpoint: boolean
+  enabled: boolean
+  hasApiKey: boolean
+  euResident: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+/** Body for creating or replacing a provider configuration. */
+export interface UpsertInferenceProviderRequest {
+  /** 'openai' | 'anthropic' | 'mistral' | 'azure_openai' */
+  provider: string
+  apiKey: string
+  baseUrl?: string
+  euEndpoint?: boolean
+  enabled?: boolean
+}
+
+/** API view of one data-plane inference key. */
+export interface InferenceKey {
+  id: string
+  name: string
+  keyPrefix: string
+  monthlyTokenLimit: number
+  rateLimitRpm: number
+  status: string
+  tokensUsedCycle: number
+  cycleMonth: string
+  createdAt: string
+  revokedAt?: string
+}
+
+/**
+ * Response for `InferenceAPI.createKey`. The `secret` is returned exactly
+ * once and cannot be retrieved again.
+ */
+export interface CreateInferenceKeyResult {
+  key: InferenceKey
+  secret: string
+}
+
+/** Body for minting a new data-plane key. */
+export interface CreateInferenceKeyRequest {
+  name: string
+  monthlyTokenLimit: number
+  rateLimitRpm?: number
+}
+
+/** Org-wide inference proxy policy. */
+export interface OrgInferenceSettings {
+  organizationId: string
+  euOnly: boolean
+  monthlyCostLimitCents: number
+  circuitOpen: boolean
+  circuitOpenedAt?: string
+  updatedAt: string
+}
+
+/** Body for updating org-wide inference proxy policy. */
+export interface UpdateOrgInferenceSettingsRequest {
+  euOnly?: boolean
+  monthlyCostLimitCents?: number
+  /** Set to `true` to close an open cost circuit. */
+  resetCircuit?: boolean
+}
+
+/** One aggregated row in an inference usage report. */
+export interface InferenceUsageRow {
+  groupKey: string
+  provider: string
+  calls: number
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  costMicrocents: number
+}
+
+/** Aggregated inference usage for an organization. */
+export interface InferenceUsageSummary {
+  from: string
+  to: string
+  groupBy: string
+  rows: InferenceUsageRow[]
+}
+
+/** Filters for `InferenceAPI.getUsage`. */
+export interface InferenceUsageOptions {
+  /** RFC 3339 start timestamp. */
+  from?: string
+  /** RFC 3339 end timestamp. */
+  to?: string
+  /** 'model' | 'key' */
+  groupBy?: string
+}
+
+// ---- Data pipeline types ----
+
+/** Identifies a data pipeline topology. */
+export type DataPipelineType = 'cdc_pg_to_kafka' | string
+
+/** Optional configuration for a data pipeline. */
+export interface DataPipelineConfig {
+  databaseName?: string
+  tables?: string[]
+  topicPrefix?: string
+  snapshotMode?: string
+}
+
+/** A data flow between two managed services. */
+export interface DataPipeline {
+  id: string
+  organizationId: string
+  name: string
+  pipelineType: DataPipelineType
+  sourceServiceId: string
+  sinkServiceId: string
+  status: string
+  provisionStep?: string
+  config: DataPipelineConfig
+  connectorName?: string
+  publicationName?: string
+  slotName?: string
+  topicPrefix?: string
+  lastConnectorState?: string
+  sourceLagBytes?: number
+  lastHealthCheckAt?: string
+  errorMessage?: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** Body for creating a data pipeline. */
+export interface CreateDataPipelineRequest {
+  name: string
+  pipelineType: DataPipelineType
+  sourceServiceId: string
+  sinkServiceId: string
+  config?: DataPipelineConfig
+}
+
+/** Live status of a data pipeline, including connector and task states. */
+export interface DataPipelineStatus {
+  id: string
+  status: string
+  connectorName?: string
+  connectorState?: string
+  taskStates?: unknown
+  sourceLagBytes?: number
+  topicPrefix?: string
+  lastHealthCheckAt?: string
+  errorMessage?: string
+}
+
+// ---- Embedding pipeline types ----
+
+/** Selects how a pipeline processes its source table. */
+export type EmbeddingPipelineMode = 'continuous' | 'scheduled' | 'manual' | string
+
+/** One auto-vectorization pipeline on a managed PostgreSQL service. */
+export interface EmbeddingPipeline {
+  id: string
+  serviceId: string
+  databaseName: string
+  sourceSchema: string
+  sourceTable: string
+  textColumns: string[]
+  modelProvider: string
+  embeddingModel: string
+  modelDimensions: number
+  targetSchema: string
+  targetTable: string
+  providerBaseUrl?: string
+  batchSize: number
+  pollIntervalSeconds: number
+  mode: EmbeddingPipelineMode
+  scheduleCron?: string
+  sourceFilter?: string
+  maxRowRetries: number
+  nextRunAt?: string
+  status: string
+  errorMessage?: string
+  rowsProcessed: number
+  rowsPending: number
+  tokensUsed: number
+  lastProcessedAt?: string
+  lastError?: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** Body for creating an embedding pipeline. */
+export interface CreateEmbeddingPipelineRequest {
+  databaseName: string
+  sourceSchema?: string
+  sourceTable: string
+  textColumns: string[]
+  modelProvider: string
+  embeddingModel: string
+  modelDimensions: number
+  targetTable?: string
+  targetSchema?: string
+  /** Write-only: sent to the provider for embedding, never returned. */
+  providerApiKey: string
+  providerBaseUrl?: string
+  batchSize?: number
+  pollIntervalSeconds?: number
+  mode?: EmbeddingPipelineMode
+  scheduleCron?: string
+  sourceFilter?: string
+  maxRowRetries?: number
+}
+
+/**
+ * Body for updating an embedding pipeline. Only the set fields are changed.
+ * `providerApiKey` is write-only.
+ */
+export interface UpdateEmbeddingPipelineRequest {
+  embeddingModel?: string
+  modelDimensions?: number
+  /** Write-only: updates the stored provider key. */
+  providerApiKey?: string
+  providerBaseUrl?: string
+  batchSize?: number
+  pollIntervalSeconds?: number
+  mode?: EmbeddingPipelineMode
+  scheduleCron?: string
+  sourceFilter?: string
+  maxRowRetries?: number
+}
+
+/** One failed source row sample from an embedding run. */
+export interface EmbeddingRunErrorSample {
+  sourceRowId: string
+  error: string
+}
+
+/** One discrete embedding job execution (scheduled or manual pipeline). */
+export interface EmbeddingPipelineRun {
+  id: string
+  pipelineId: string
+  status: string
+  trigger: string
+  startedAt?: string
+  finishedAt?: string
+  rowsScanned: number
+  rowsEmbedded: number
+  rowsFailed: number
+  tokensUsed: number
+  errorMessage?: string
+  errorSample?: EmbeddingRunErrorSample[]
+  createdAt: string
+}
+
+// ---- Webhook and event types ----
+
+/** A customer-configured HTTP endpoint that receives signed event notifications. */
+export interface WebhookEndpoint {
+  id: string
+  url: string
+  events: string[]
+  active: boolean
+  /** Signing secret, returned only in the create response. */
+  secret?: string
+  createdAt: string
+  updatedAt: string
+  consecutiveFailures: number
+  totalDelivered: number
+  totalFailed: number
+  lastSuccessAt?: string
+  lastFailureAt?: string
+  disabledAt?: string
+  disabledReason?: string
+}
+
+/** One entry in a webhook endpoint's delivery history. */
+export interface WebhookDelivery {
+  id: string
+  webhookId: string
+  eventId?: string
+  eventType: string
+  status: string
+  attemptCount: number
+  nextRetryAt?: string
+  responseStatus?: number
+  responseBody?: string
+  deliveredAt?: string
+  failedAt?: string
+  errorMessage?: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** Body for registering a webhook endpoint. */
+export interface CreateWebhookRequest {
+  url: string
+  /** Event types to subscribe to. An empty list subscribes to all events. */
+  events: string[]
+}
+
+/** One entry in the cursor-paginated event feed. */
+export interface WebhookEvent {
+  seq: number
+  id: string
+  organizationId?: string
+  serviceId?: string
+  eventType: string
+  /** Raw event data as returned by the API. */
+  data: unknown
+  createdAt: string
+}
+
+/** Options for listing events. */
+export interface ListEventsOptions {
+  /** Cursor value from a previous page's `nextCursor`; omit to start at the newest event. */
+  cursor?: number
+  /** Page size cap (server default 50, maximum 200). */
+  limit?: number
+  /** Filter to a single event type. */
+  eventType?: string
+}
+
+/** One page of the event feed. */
+export interface ListEventsResponse {
+  events: WebhookEvent[]
+  nextCursor?: number
+}
+
+// ---- AI actions types ----
+
+/** How a client acts on a feed item: the safety tier, target, and deep link. */
+export interface AIActionRef {
+  type: string
+  tier: string
+  target: string
+  href: string
+}
+
+/**
+ * One prioritized entry in the AI actions feed. `kind` is `index` or
+ * `advisory`; `severity` is `critical`, `warning`, or `info`.
+ */
+export interface AIActionItem {
+  id: string
+  kind: string
+  severity: string
+  serviceId: string
+  serviceName: string
+  title: string
+  summary: string
+  action: AIActionRef
+  createdAt: string
+}
+
+/** The AI actions feed envelope. */
+export interface AIActionsResponse {
+  items: AIActionItem[]
+  total: number
+  truncated: boolean
+}
+
+/** Filters for `AIActionsAPI.list`. */
+export interface AIActionsListOptions {
+  serviceId?: string
+  /** 'index' | 'advisory' */
+  kind?: string
+  /** Minimum severity: 'info' | 'warning' | 'critical' */
+  severity?: string
+  limit?: number
+}
+
+/** Body for the copilot plan endpoint. */
+export interface CopilotPlanRequest {
+  intent: string
+  serviceId?: string
+}
+
+/** One proposed step in a copilot plan. */
+export interface CopilotStep {
+  tool: string
+  args?: Record<string, unknown>
+  tier: string
+  preview: string
+  rationale?: string
+}
+
+/** A previewable plan produced by the copilot. */
+export interface CopilotPlan {
+  summary: string
+  steps: CopilotStep[]
+  unsupported: boolean
+  note?: string
+}
+
+/** Body for executing one confirm-tier AI action. */
+export interface ExecuteAIActionRequest {
+  actionType: string
+  serviceId: string
+  args?: Record<string, unknown>
+  confirm: boolean
+}
+
+/** Result envelope for an AI action execution attempt. */
+export interface ExecuteAIActionResult {
+  actionType: string
+  /** 'executed' | 'failed' | 'rejected' */
+  status: string
+  httpStatus: number
+  message: string
+  detail?: unknown
+}
+
+/** API view of one persisted Action Center execution. */
+export interface AIActionExecution {
+  id: string
+  organizationId?: string
+  serviceId: string
+  actionType: string
+  targetId?: string
+  status: string
+  httpStatus: number
+  actorUserId?: string
+  createdAt: string
+  revertedAt?: string
+  revertStatus?: string
+}
+
+/** Execution history envelope. */
+export interface AIActionExecutionListResponse {
+  executions: AIActionExecution[]
+  totalCount: number
+}
+
+/** Filters for `AIActionsAPI.listExecutions`. */
+export interface AIActionExecutionsListOptions {
+  serviceId?: string
+  limit?: number
+}
+
+/** Response envelope for an accepted rollback. */
+export interface AIActionRollbackResult {
+  executionId: string
+  actionType: string
+  revertStatus: string
+  message: string
+  taskId?: string
+}
+
+// ---- Vector search types ----
+
+/** pgvector distance operator. */
+export type VectorSearchMetric = 'cosine' | 'l2' | 'ip' | string
+
+/** One column filter applied to a vector search. */
+export interface VectorSearchFilter {
+  column: string
+  /** Only 'eq' is currently supported. */
+  op: string
+  value: string | number | boolean
+}
+
+/** Body for a vector search request. */
+export interface VectorSearchRequest {
+  databaseName: string
+  schema?: string
+  table: string
+  embeddingColumn?: string
+  /** Pre-computed query vector. Mutually exclusive with `queryText`. */
+  vector?: number[]
+  /**
+   * Natural-language query text. Requires `pipelineId` so the platform can
+   * embed the text with the same model that produced the indexed vectors.
+   */
+  queryText?: string
+  pipelineId?: string
+  topK?: number
+  metric?: VectorSearchMetric
+  filters?: VectorSearchFilter[]
+  includeColumns?: string[]
+}
+
+/** One result column descriptor. */
+export interface VectorSearchColumn {
+  name: string
+  type: string
+}
+
+/** Vector search result, with the search parameters echoed back. */
+export interface VectorSearchResponse {
+  columns: VectorSearchColumn[]
+  rows: unknown[][]
+  rowCount: number
+  truncated: boolean
+  executionMs: number
+  metric: VectorSearchMetric
+  topK: number
+}
+
 // ---- Error types ----
 
 export interface APIErrorBody {

@@ -9,6 +9,8 @@ import type {
   AuthConfigurationWithKeys,
   AuthSigningKey,
   RevokeSessionResponse,
+  DeleteAppServiceAuthUserRequest,
+  AuthUserErasureResponse,
 } from './types.js'
 
 /**
@@ -257,6 +259,45 @@ export class AppServicesAPI {
       `/app-services/${appServiceId}/auth/sessions/${sessionId}/revoke`,
     )
     return toCamel<RevokeSessionResponse>(raw)
+  }
+
+  /**
+   * Erase one end-user under the GDPR right to erasure (Art. 17). Set
+   * exactly one of `email` or `userId` in the request body. The erasure is
+   * dispatched asynchronously to the backing database's primary VM; the
+   * returned `taskId` is for status polling. Returns 202 Accepted.
+   *
+   * The email is forwarded only to the customer's own database VM; it is
+   * never persisted or logged by the control plane.
+   */
+  async deleteAuthUser(
+    appServiceId: string,
+    req: DeleteAppServiceAuthUserRequest,
+  ): Promise<AuthUserErasureResponse> {
+    const body = toSnake(req)
+    const raw = await this.http.post<unknown>(
+      `/app-services/${appServiceId}/auth/users/delete`,
+      body,
+    )
+    return toCamel<AuthUserErasureResponse>(raw)
+  }
+
+  /**
+   * Erase one end-user by path identifier (GDPR right to erasure, Art. 17).
+   * `identifier` is either the user's email address or their auth subject
+   * UUID. The platform disambiguates: a UUID-shaped value is treated as a
+   * user ID; everything else is treated as an email. Uses
+   * `DELETE /app-services/{id}/auth/users/{identifier}`. Returns 202
+   * Accepted with the dispatched task id.
+   */
+  async deleteAuthUserByIdentifier(
+    appServiceId: string,
+    identifier: string,
+  ): Promise<AuthUserErasureResponse> {
+    const raw = await this.http.delete<unknown>(
+      `/app-services/${appServiceId}/auth/users/${encodeURIComponent(identifier)}`,
+    )
+    return toCamel<AuthUserErasureResponse>(raw)
   }
 
   // ---- Utility ----
