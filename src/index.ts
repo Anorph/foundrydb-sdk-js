@@ -54,6 +54,7 @@ export type {
   AuthIdpProvider,
   AuthIdpProviderRequest,
   AuthIdpProviderConfig,
+  UpsertAuthProviderRequest,
   AuthEnableRequest,
   AuthConfiguration,
   AuthSigningKey,

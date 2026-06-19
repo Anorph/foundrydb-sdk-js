@@ -363,6 +363,19 @@ export interface AuthIdpProviderRequest {
 }
 
 /**
+ * Request body for `AppServicesAPI.upsertAuthProvider`. Creates or replaces
+ * the OAuth app credentials for one social-login provider after auth is
+ * enabled. `clientSecret` is write-only: stored in the platform secret store
+ * and never returned by any read endpoint.
+ */
+export interface UpsertAuthProviderRequest {
+  clientId: string
+  /** Write-only: stored in the platform secret store, never returned. */
+  clientSecret: string
+  displayName?: string
+}
+
+/**
  * Stored, non-secret configuration of one social-login provider returned
  * on the `AuthConfiguration`. The `clientSecret` is never returned.
  */

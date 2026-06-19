@@ -7,10 +7,13 @@ import type {
   AuthEnableRequest,
   AuthConfiguration,
   AuthConfigurationWithKeys,
+  AuthIdpProvider,
+  AuthIdpProviderConfig,
   AuthSigningKey,
   RevokeSessionResponse,
   DeleteAppServiceAuthUserRequest,
   AuthUserErasureResponse,
+  UpsertAuthProviderRequest,
 } from './types.js'
 
 /**
@@ -54,6 +57,10 @@ interface ListAppServicesResponse {
 
 interface ListAppDeploymentsResponse {
   deployments: AppDeployment[]
+}
+
+interface ListAuthProvidersResponse {
+  providers: AuthIdpProviderConfig[]
 }
 
 /**
@@ -298,6 +305,57 @@ export class AppServicesAPI {
       `/app-services/${appServiceId}/auth/users/${encodeURIComponent(identifier)}`,
     )
     return toCamel<AuthUserErasureResponse>(raw)
+  }
+
+  // ---- Auth IDP providers ----
+
+  /**
+   * List the social-login providers currently configured for an app service's
+   * auth. Returns the public configuration for each provider; `clientSecret`
+   * is never returned.
+   */
+  async listAuthProviders(appServiceId: string): Promise<AuthIdpProviderConfig[]> {
+    const raw = await this.http.get<unknown>(`/app-services/${appServiceId}/auth/providers`)
+    const result = toCamel<ListAuthProvidersResponse>(raw)
+    return result.providers
+  }
+
+  /**
+   * Create or replace the OAuth app credentials for one social-login provider.
+   * If the provider was already configured its `clientId`, `clientSecret`, and
+   * optional `displayName` are replaced atomically. `clientSecret` is
+   * write-only: stored in the platform secret store and never returned.
+   * Returns the updated list of configured providers.
+   */
+  async upsertAuthProvider(
+    appServiceId: string,
+    provider: AuthIdpProvider,
+    req: UpsertAuthProviderRequest,
+  ): Promise<AuthIdpProviderConfig[]> {
+    const body = toSnake(req)
+    const raw = await this.http.put<unknown>(
+      `/app-services/${appServiceId}/auth/providers/${encodeURIComponent(provider)}`,
+      body,
+    )
+    const result = toCamel<ListAuthProvidersResponse>(raw)
+    return result.providers
+  }
+
+  /**
+   * Remove one social-login provider from an app service's auth configuration.
+   * End-users who authenticated via the removed provider retain their accounts
+   * but can no longer use that provider to log in. Returns the updated list of
+   * configured providers.
+   */
+  async removeAuthProvider(
+    appServiceId: string,
+    provider: AuthIdpProvider,
+  ): Promise<AuthIdpProviderConfig[]> {
+    const raw = await this.http.delete<unknown>(
+      `/app-services/${appServiceId}/auth/providers/${encodeURIComponent(provider)}`,
+    )
+    const result = toCamel<ListAuthProvidersResponse>(raw)
+    return result.providers
   }
 
   // ---- Utility ----
