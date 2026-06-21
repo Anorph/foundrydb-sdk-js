@@ -6,6 +6,10 @@ import type {
   Stack,
   LaunchStackRequest,
   PreviewStackRequest,
+  CustomStackTemplate,
+  CustomTemplateRequest,
+  StackUpgradePlan,
+  StackMigration,
 } from './types.js'
 
 interface ListStackTemplatesResponse {
@@ -18,6 +22,10 @@ interface ListStacksResponse {
 
 interface StackActionResponse {
   status: string
+}
+
+interface ListCustomTemplatesResponse {
+  templates: CustomStackTemplate[]
 }
 
 /**
@@ -113,6 +121,126 @@ export class StacksAPI {
     const raw = await this.http.post<unknown>(`/stacks/${stackId}/retry`)
     const result = toCamel<StackActionResponse>(raw)
     return result.status
+  }
+
+  // ---- Marketplace: custom templates ----
+
+  /**
+   * Create a new custom stack template owned by the authenticated user's
+   * organization. The template starts in the "draft" publication state and
+   * "private" visibility unless overridden in the request.
+   */
+  async createTemplate(req: CustomTemplateRequest): Promise<CustomStackTemplate> {
+    const body = toSnake(req)
+    const raw = await this.http.post<unknown>('/stacks/templates', body)
+    return toCamel<CustomStackTemplate>(raw)
+  }
+
+  /**
+   * List all custom stack templates owned by the authenticated user's
+   * organization.
+   */
+  async listMyTemplates(): Promise<CustomStackTemplate[]> {
+    const raw = await this.http.get<unknown>('/stacks/templates/mine')
+    const result = toCamel<ListCustomTemplatesResponse>(raw)
+    return result.templates
+  }
+
+  /**
+   * List all custom stack templates that have been published to the
+   * marketplace (publication_status = "published", visibility = "public").
+   */
+  async listMarketplace(): Promise<CustomStackTemplate[]> {
+    const raw = await this.http.get<unknown>('/stacks/templates/marketplace')
+    const result = toCamel<ListCustomTemplatesResponse>(raw)
+    return result.templates
+  }
+
+  /**
+   * Get a single custom stack template by ID. Returns `null` when the
+   * template does not exist or the caller has no access to it (404).
+   */
+  async getTemplate(id: string): Promise<CustomStackTemplate | null> {
+    try {
+      const raw = await this.http.get<unknown>(`/stacks/templates/${id}`)
+      return toCamel<CustomStackTemplate>(raw)
+    } catch (err: unknown) {
+      if (
+        err &&
+        typeof err === 'object' &&
+        'statusCode' in err &&
+        (err as { statusCode: number }).statusCode === 404
+      ) {
+        return null
+      }
+      throw err
+    }
+  }
+
+  /**
+   * Update one or more fields of a custom stack template. Only the fields
+   * present in `req` are changed; omitted fields keep their current values.
+   */
+  async updateTemplate(
+    id: string,
+    req: Partial<CustomTemplateRequest>,
+  ): Promise<CustomStackTemplate> {
+    const body = toSnake(req)
+    const raw = await this.http.patch<unknown>(`/stacks/templates/${id}`, body)
+    return toCamel<CustomStackTemplate>(raw)
+  }
+
+  /**
+   * Delete a custom stack template. The template must be in a non-published
+   * state before it can be deleted.
+   */
+  async deleteTemplate(id: string): Promise<void> {
+    await this.http.delete<unknown>(`/stacks/templates/${id}`)
+  }
+
+  /**
+   * Submit a custom stack template for marketplace review. The template
+   * transitions from "draft" to "submitted" and is queued for approval.
+   * Once approved it moves to "published" and appears in `listMarketplace`.
+   */
+  async publishTemplate(id: string): Promise<CustomStackTemplate> {
+    const raw = await this.http.post<unknown>(`/stacks/templates/${id}/publish`)
+    return toCamel<CustomStackTemplate>(raw)
+  }
+
+  /**
+   * Remove a published custom stack template from the marketplace. The
+   * template transitions to "unpublished" and is no longer discoverable via
+   * `listMarketplace`. Existing stacks launched from the template are not
+   * affected.
+   */
+  async unpublishTemplate(id: string): Promise<CustomStackTemplate> {
+    const raw = await this.http.post<unknown>(`/stacks/templates/${id}/unpublish`)
+    return toCamel<CustomStackTemplate>(raw)
+  }
+
+  // ---- Stack upgrade ----
+
+  /**
+   * Preview the resource changes and cost impact of upgrading a running stack
+   * to the next available template version. No mutation is performed; call
+   * `upgrade` to execute the plan.
+   */
+  async previewUpgrade(stackId: string): Promise<StackUpgradePlan> {
+    const raw = await this.http.post<unknown>(`/stacks/${stackId}/upgrade/preview`)
+    return toCamel<StackUpgradePlan>(raw)
+  }
+
+  /**
+   * Execute a stack upgrade to the next available template version.
+   * `acceptedMonthlyCost` must match the `totalCostEurMonthly` returned by
+   * `previewUpgrade`; the platform rejects the request if the live cost
+   * exceeds this value.
+   */
+  async upgrade(stackId: string, acceptedMonthlyCost: number): Promise<StackMigration> {
+    const body = toSnake({ acceptedMonthlyCost })
+    const raw = await this.http.post<unknown>(`/stacks/${stackId}/upgrade`, body)
+    return toCamel<StackMigration>(raw)
   }
 
   // ---- Utility ----

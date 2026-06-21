@@ -1603,6 +1603,128 @@ export interface CreateAttachmentRequest {
   subdomain?: string
 }
 
+// ---- Stack marketplace types ----
+
+/**
+ * Visibility scope of a custom stack template. Private templates are visible
+ * only to the creating user; org_shared templates are visible to all members
+ * of the owning organization; public templates appear in the marketplace.
+ */
+export type StackVisibility = 'private' | 'org_shared' | 'public'
+
+/**
+ * Publication lifecycle of a custom stack template. A template must be
+ * submitted for review before it can be published to the marketplace.
+ */
+export type StackPublicationStatus =
+  | 'draft'
+  | 'submitted'
+  | 'approved'
+  | 'published'
+  | 'rejected'
+  | 'unpublished'
+
+/**
+ * The descriptor body that defines the resources and wiring of a stack.
+ * The structure mirrors the server-side stack descriptor schema.
+ */
+export type StackDescriptor = Record<string, unknown>
+
+/** A customer-authored stack template stored on the platform. */
+export interface CustomStackTemplate {
+  /** Platform-assigned template identifier. */
+  id: string
+  /** Stable machine identifier used to reference this template. */
+  name: string
+  /** Human-readable name shown in the UI. */
+  displayName: string
+  /** Short description of what this template provisions. */
+  description: string
+  /** Semantic version string for this template. */
+  version: string
+  /** Who can see this template. */
+  visibility: StackVisibility
+  /** Publication workflow state. */
+  publicationStatus: StackPublicationStatus
+  /** The full stack descriptor that defines resources and wiring. */
+  descriptor: StackDescriptor
+  /** Organization that owns this template. */
+  orgId: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** Body for creating a new custom stack template. */
+export interface CustomTemplateRequest {
+  /** Stable machine identifier for the template. */
+  name: string
+  /** Human-readable name shown in the UI. */
+  displayName: string
+  /** Short description of what the template provisions. */
+  description: string
+  /** Semantic version string (defaults to "1.0.0" if omitted). */
+  version?: string
+  /** Initial visibility scope (defaults to "private" if omitted). */
+  visibility?: StackVisibility
+  /** The stack descriptor that defines resources and wiring. */
+  descriptor: StackDescriptor
+}
+
+/** One resource change within an upgrade plan. */
+export interface ResourceChange {
+  /** Kind of the affected resource (e.g. "database", "files", "app"). */
+  resourceType: string
+  /** Platform-assigned identifier of the affected resource. */
+  resourceId: string
+  /** Nature of the change: 'add', 'remove', or 'modify'. */
+  changeType: 'add' | 'remove' | 'modify' | string
+  /** Human-readable description of what will change. */
+  description?: string
+  /** Monthly cost of the resource before the upgrade, in EUR. */
+  oldCostEurMonthly?: number
+  /** Monthly cost of the resource after the upgrade, in EUR. */
+  newCostEurMonthly?: number
+}
+
+/**
+ * A plan describing the resource changes and cost impact of upgrading a
+ * running stack to a newer template version.
+ */
+export interface StackUpgradePlan {
+  /** ID of the stack being upgraded. */
+  stackId: string
+  /** Template version currently in use. */
+  currentVersion: string
+  /** Template version the upgrade targets. */
+  targetVersion: string
+  /** Per-resource change list. */
+  resourceChanges: ResourceChange[]
+  /** Total estimated monthly cost after the upgrade, in EUR. */
+  totalCostEurMonthly: number
+  /** Estimated unavailability window during the upgrade, in seconds. */
+  estimatedDowntimeSeconds?: number
+}
+
+/** A record of one executed stack upgrade. */
+export interface StackMigration {
+  /** Platform-assigned migration identifier. */
+  id: string
+  /** ID of the stack being migrated. */
+  stackId: string
+  /** Template version before the migration. */
+  fromVersion: string
+  /** Template version being migrated to. */
+  toVersion: string
+  /** Lifecycle status of the migration. */
+  status: string
+  /** Timestamp when the migration started. */
+  startedAt: string
+  /** Timestamp when the migration completed (set on terminal states). */
+  completedAt?: string
+  /** Error message if the migration failed. */
+  error?: string
+}
+
 // ---- Stack types ----
 
 /** The lifecycle status of a stack. */
@@ -1720,6 +1842,16 @@ export interface Stack {
   estimatedMonthlyCost: number
   /** Organization the stack belongs to, if org-scoped. */
   organizationId?: string
+  /**
+   * ID of the custom template this stack was launched from, if launched from
+   * a custom (marketplace or org-shared) template rather than a built-in one.
+   */
+  sourceTemplateId?: string
+  /**
+   * Organization ID of the publisher that owns the source custom template,
+   * if the template was discovered via the marketplace.
+   */
+  sourcePublisherOrgId?: string
   /** Constituent resources, included when the API returns full detail. */
   resources?: StackResource[]
   createdAt: string
@@ -1730,6 +1862,12 @@ export interface Stack {
 export interface PreviewStackRequest {
   /** Template name to preview (from `listStackTemplates`). */
   templateName: string
+  /**
+   * ID of a custom stack template to preview (from `getTemplate` or
+   * `listMyTemplates`). Mutually exclusive with `templateName` when referring
+   * to a custom template.
+   */
+  templateId?: string
 }
 
 /** Body for launching a new stack. */
@@ -1738,6 +1876,12 @@ export interface LaunchStackRequest {
   name: string
   /** Template to launch (from `listStackTemplates`). */
   templateName: string
+  /**
+   * ID of a custom stack template to launch (from `getTemplate` or
+   * `listMyTemplates`). Mutually exclusive with `templateName` when referring
+   * to a custom template.
+   */
+  templateId?: string
   /**
    * Organization to create the stack under.
    * Overrides the `organizationId` set on the client config.
