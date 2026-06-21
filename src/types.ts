@@ -1509,6 +1509,100 @@ export interface ComplianceSigningKeySet {
   keys: ComplianceSigningKey[]
 }
 
+// ---- Companion-app attachment types ----
+
+/**
+ * The set of companion applications that can be click-attached to a managed
+ * database service. The list grows over time; treat unknown values as strings.
+ */
+export type AttachmentKind =
+  | 'metabase'
+  | 'directus'
+  | 'hasura'
+  | 'nocodb'
+  | 'open-webui'
+  | string
+
+/**
+ * One entry in the attachment catalog. Describes a companion application kind
+ * that the platform can provision and wire to a parent managed service.
+ */
+export interface AttachmentCatalogEntry {
+  /** Stable machine identifier for the companion app. */
+  kind: AttachmentKind
+  /** Human-readable name shown in the UI. */
+  displayName: string
+  /** Short description of what the companion app provides. */
+  description: string
+  /** Grouping category (e.g. "analytics", "cms", "api"). */
+  category: string
+  /** Default compute plan used when no `planName` is supplied on create. */
+  defaultPlan: string
+  /**
+   * Database types the companion app can be attached to (e.g. ["postgresql"]).
+   * An empty array means the app has no parent-kind restriction.
+   */
+  requiresParentKinds: string[]
+}
+
+/**
+ * Summary record returned by `listAttachments`. Provides enough information
+ * to display an attachment in a list without fetching the full app service.
+ */
+export interface AttachmentSummary {
+  /** Platform-assigned attachment record identifier. */
+  attachmentId: string
+  /** ID of the app service backing this companion app. */
+  appServiceId: string
+  /** Companion app kind (e.g. "metabase"). */
+  kind: AttachmentKind
+  /** Display name of the companion app service. */
+  name: string
+  /** Lifecycle status of the underlying app service. */
+  status: string
+  /**
+   * Whether the platform has completed wiring the companion app to the parent
+   * service (injecting credentials, setting env vars, etc.).
+   */
+  wiringStatus: string
+  /** Public HTTPS URL of the companion app, once running. */
+  url?: string
+}
+
+/**
+ * Credentials returned for a companion app. The specific fields present depend
+ * on the companion app kind; only non-secret fields are returned in the
+ * standard response. `generated` carries any additional key-value pairs minted
+ * during post-deploy wiring.
+ */
+export interface AttachmentCredentials {
+  /** Admin email address for UIs that require email-based login. */
+  adminEmail?: string
+  /**
+   * Admin password. Write-only at create time; returned once here for
+   * initial retrieval. Store it securely; the platform does not re-expose it
+   * after first retrieval.
+   */
+  adminPassword?: string
+  /** Additional key-value credential pairs specific to the companion app. */
+  generated?: Record<string, string>
+  /** Direct URL to the companion app login page. */
+  loginUrl?: string
+}
+
+/** Body for creating a companion-app attachment on a managed service. */
+export interface CreateAttachmentRequest {
+  /** The companion app kind to provision (e.g. "metabase"). */
+  kind: AttachmentKind
+  /** Compute plan for the companion app service. Defaults to the catalog entry's `defaultPlan`. */
+  planName?: string
+  /**
+   * Subdomain prefix for the companion app's public URL.
+   * If omitted the platform generates one from the kind and service name.
+   */
+  subdomain?: string
+}
+
 // ---- Error types ----
 
 export interface APIErrorBody {

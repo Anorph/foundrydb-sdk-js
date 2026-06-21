@@ -19,6 +19,7 @@ export { AIActionsAPI } from './ai-actions.js'
 export { VectorSearchAPI } from './vector-search.js'
 export { ComplianceAPI } from './compliance.js'
 export type { ComplianceFramework } from './compliance.js'
+export { AttachmentsAPI } from './attachments.js'
 export { FoundryDBError } from './types.js'
 export type {
   FoundryDBConfig,
@@ -158,4 +159,9 @@ export type {
   ComplianceReportRecord,
   ComplianceSigningKey,
   ComplianceSigningKeySet,
+  AttachmentKind,
+  AttachmentCatalogEntry,
+  AttachmentSummary,
+  AttachmentCredentials,
+  CreateAttachmentRequest,
 } from './types.js'

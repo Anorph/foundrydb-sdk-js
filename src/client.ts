@@ -17,6 +17,7 @@ import { WebhooksAPI } from './webhooks.js'
 import { AIActionsAPI } from './ai-actions.js'
 import { VectorSearchAPI } from './vector-search.js'
 import { ComplianceAPI } from './compliance.js'
+import { AttachmentsAPI } from './attachments.js'
 
 /**
  * Internal HTTP client used by all API modules.
@@ -257,6 +258,7 @@ export class FoundryDB {
   readonly aiActions: AIActionsAPI
   readonly vectorSearch: VectorSearchAPI
   readonly compliance: ComplianceAPI
+  readonly attachments: AttachmentsAPI
 
   constructor(config: FoundryDBConfig) {
     const http = new HTTPClient(config)
@@ -277,5 +279,6 @@ export class FoundryDB {
     this.aiActions = new AIActionsAPI(http)
     this.vectorSearch = new VectorSearchAPI(http)
     this.compliance = new ComplianceAPI(http)
+    this.attachments = new AttachmentsAPI(http)
   }
 }
