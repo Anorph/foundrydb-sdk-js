@@ -20,6 +20,7 @@ export { VectorSearchAPI } from './vector-search.js'
 export { ComplianceAPI } from './compliance.js'
 export type { ComplianceFramework } from './compliance.js'
 export { AttachmentsAPI } from './attachments.js'
+export { StacksAPI } from './stacks.js'
 export { FoundryDBError } from './types.js'
 export type {
   FoundryDBConfig,
@@ -164,4 +165,13 @@ export type {
   AttachmentSummary,
   AttachmentCredentials,
   CreateAttachmentRequest,
+  StackStatus,
+  StackResourceKind,
+  StackCostLineItem,
+  StackCostPreview,
+  StackTemplate,
+  StackResource,
+  Stack,
+  PreviewStackRequest,
+  LaunchStackRequest,
 } from './types.js'

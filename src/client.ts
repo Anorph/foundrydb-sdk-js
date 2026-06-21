@@ -18,6 +18,7 @@ import { AIActionsAPI } from './ai-actions.js'
 import { VectorSearchAPI } from './vector-search.js'
 import { ComplianceAPI } from './compliance.js'
 import { AttachmentsAPI } from './attachments.js'
+import { StacksAPI } from './stacks.js'
 
 /**
  * Internal HTTP client used by all API modules.
@@ -259,6 +260,7 @@ export class FoundryDB {
   readonly vectorSearch: VectorSearchAPI
   readonly compliance: ComplianceAPI
   readonly attachments: AttachmentsAPI
+  readonly stacks: StacksAPI
 
   constructor(config: FoundryDBConfig) {
     const http = new HTTPClient(config)
@@ -280,5 +282,6 @@ export class FoundryDB {
     this.vectorSearch = new VectorSearchAPI(http)
     this.compliance = new ComplianceAPI(http)
     this.attachments = new AttachmentsAPI(http)
+    this.stacks = new StacksAPI(http)
   }
 }

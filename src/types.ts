@@ -1603,6 +1603,159 @@ export interface CreateAttachmentRequest {
   subdomain?: string
 }
 
+// ---- Stack types ----
+
+/** The lifecycle status of a stack. */
+export type StackStatus =
+  | 'Pending'
+  | 'Provisioning'
+  | 'Wiring'
+  | 'Running'
+  | 'RollingBack'
+  | 'Failed'
+  | 'Deleting'
+  | 'Deleted'
+
+/** The resource kind of a constituent stack resource. */
+export type StackResourceKind = 'database' | 'files' | 'inference' | 'app'
+
+/**
+ * One line item in a stack cost preview. `isCeiling` is true when the cost is
+ * enforced as a hard monthly ceiling rather than an estimate.
+ */
+export interface StackCostLineItem {
+  /** Stable symbolic name for this resource (e.g. "primary_db"). */
+  symbolicName: string
+  /** Resource kind: database, files, inference, or app. */
+  kind: StackResourceKind
+  /** Human-readable description of what this resource is. */
+  description: string
+  /** Estimated or ceiling monthly cost in the preview currency. */
+  monthlyCost: number
+  /** When true, this cost is a hard monthly ceiling, not a soft estimate. */
+  isCeiling: boolean
+}
+
+/**
+ * A cost preview for a stack template. Returned by `previewStack` and
+ * optionally embedded in `StackTemplate.costPreview`.
+ */
+export interface StackCostPreview {
+  /** Template name the preview applies to. */
+  templateName: string
+  /** ISO 4217 currency code for all monetary values in this preview (e.g. "EUR"). */
+  currency: string
+  /** Sum of all line-item monthly costs. */
+  monthlyTotal: number
+  /** Per-resource cost breakdown. */
+  lineItems: StackCostLineItem[]
+  /** Optional billing or quota warnings to surface to the caller. */
+  warnings?: string[]
+}
+
+/** An available stack template visible in the template catalog. */
+export interface StackTemplate {
+  /** Stable machine identifier for the template (used in `launchStack`). */
+  name: string
+  /** Human-readable name shown in the UI. */
+  displayName: string
+  /** Short description of what this stack provisions. */
+  description: string
+  /** Template schema version string. */
+  version: string
+  /** Optional pre-computed cost preview for the default configuration. */
+  costPreview?: StackCostPreview
+}
+
+/**
+ * One constituent resource within a provisioned stack. Resources are
+ * provisioned in dependency order according to their `sequence` and
+ * `dependsOn` fields.
+ */
+export interface StackResource {
+  /** Platform-assigned resource record identifier. */
+  id: string
+  /** ID of the parent stack. */
+  stackId: string
+  /** Stable symbolic name within the template (e.g. "primary_db"). */
+  symbolicName: string
+  /** Resource kind: database, files, inference, or app. */
+  kind: StackResourceKind
+  /** ID of the managed service created for this resource, once provisioned. */
+  serviceId?: string
+  /** External reference identifier (provider-level ID if applicable). */
+  refId?: string
+  /** Lifecycle status of this resource. */
+  status: StackStatus
+  /** Human-readable detail about the current status or last error. */
+  statusDetail: string
+  /**
+   * Symbolic names of resources this resource depends on. The platform
+   * waits for all dependencies to reach Running before provisioning this one.
+   */
+  dependsOn: string[]
+  /** Provisioning sequence number within the stack (lower runs first). */
+  sequence: number
+  createdAt: string
+  updatedAt: string
+}
+
+/** A provisioned stack instance. */
+export interface Stack {
+  /** Platform-assigned stack identifier. */
+  id: string
+  /** User-assigned name for this stack instance. */
+  name: string
+  /** Template the stack was launched from. */
+  templateName: string
+  /** Template version the stack was launched from. */
+  templateVersion: string
+  /** Aggregate lifecycle status of the stack. */
+  status: StackStatus
+  /** Human-readable detail about the current status or last error. */
+  statusDetail: string
+  /** Public entry-point URL for the stack once it is Running (e.g. the app URL). */
+  endpointUrl: string
+  /** Accepted monthly cost supplied at launch time. */
+  estimatedMonthlyCost: number
+  /** Organization the stack belongs to, if org-scoped. */
+  organizationId?: string
+  /** Constituent resources, included when the API returns full detail. */
+  resources?: StackResource[]
+  createdAt: string
+  updatedAt: string
+}
+
+/** Body for previewing the cost of a stack template. */
+export interface PreviewStackRequest {
+  /** Template name to preview (from `listStackTemplates`). */
+  templateName: string
+}
+
+/** Body for launching a new stack. */
+export interface LaunchStackRequest {
+  /** User-assigned name for the stack instance. */
+  name: string
+  /** Template to launch (from `listStackTemplates`). */
+  templateName: string
+  /**
+   * Organization to create the stack under.
+   * Overrides the `organizationId` set on the client config.
+   */
+  organizationId?: string
+  /**
+   * Accepted monthly cost in the template's preview currency. Must match
+   * the `monthlyTotal` returned by `previewStack`. The platform rejects
+   * the request if the live cost exceeds this value.
+   */
+  acceptedMonthlyCost: number
+  /**
+   * Optional per-resource overrides keyed by symbolic name. Each entry may
+   * supply a `planName`, `zone`, or other template-exposed parameter.
+   */
+  overrides?: Record<string, Record<string, unknown>>
+}
+
 // ---- Error types ----
 
 export interface APIErrorBody {
