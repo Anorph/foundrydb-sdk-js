@@ -205,6 +205,48 @@ const settings = await client.edge.updateAppEdgeSettings(app.id, {
 console.log(settings.configVersion) // fleet converges on this version
 ```
 
+### Compliance Evidence Packets
+
+Generate cryptographically signed compliance evidence packets (SOC 2 and GDPR Art. 30 ROPA) for an organization. All methods live on `client.compliance`.
+
+```typescript
+// Generate a new SOC 2 compliance report
+const report = await client.compliance.generateComplianceReport('org_abc', 'soc2')
+console.log(report.reportId)           // persist for re-download
+console.log(report.packet.framework)   // 'soc2'
+console.log(report.signature.keyId)    // signing key used
+
+// Generate a GDPR Art. 30 Record of Processing Activities report
+const ropa = await client.compliance.generateComplianceReport('org_abc', 'gdpr_ropa')
+
+// List all generated compliance reports for an organization
+const reports = await client.compliance.listComplianceReports('org_abc')
+reports.forEach(r => console.log(r.id, r.framework, r.generatedAt, r.hasPdf))
+
+// Re-download a report as a signed JSON packet
+const packet = await client.compliance.downloadComplianceReportJSON('org_abc', report.reportId)
+console.log(packet.packet.controls.length)   // number of assessed controls
+console.log(packet.signature.canonicalSha256) // hash for independent verification
+
+// Download a PDF version of a report (returns raw bytes)
+const pdf = await client.compliance.downloadComplianceReportPDF('org_abc', report.reportId)
+// pdf is a Uint8Array — write to disk, attach to an email, etc.
+import { writeFileSync } from 'fs'
+writeFileSync('compliance-report.pdf', pdf)
+
+// Fetch the platform's public signing keys (no auth required)
+// Auditors can call this independently to verify packet signatures
+const keys = await client.compliance.complianceSigningKeys()
+keys.keys.forEach(k => console.log(k.keyId, k.algorithm, k.active))
+```
+
+Supported frameworks:
+
+| Value | Description |
+|-------|-------------|
+| `soc2` | SOC 2 Type II evidence packet |
+| `gdpr_ropa` | GDPR Art. 30 Record of Processing Activities |
+
 ## Error Handling
 
 All errors from the API throw a `FoundryDBError` with `statusCode` and `body` properties:

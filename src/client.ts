@@ -16,6 +16,7 @@ import { EmbeddingPipelinesAPI } from './embedding-pipelines.js'
 import { WebhooksAPI } from './webhooks.js'
 import { AIActionsAPI } from './ai-actions.js'
 import { VectorSearchAPI } from './vector-search.js'
+import { ComplianceAPI } from './compliance.js'
 
 /**
  * Internal HTTP client used by all API modules.
@@ -119,6 +120,72 @@ export class HTTPClient {
   async delete<T = void>(path: string, organizationId?: string): Promise<T> {
     return this.request<T>('DELETE', path, undefined, undefined, organizationId)
   }
+
+  /**
+   * Issue a GET and return the raw bytes as a Uint8Array. Used for binary
+   * endpoints such as PDF downloads.
+   */
+  async getBinary(path: string, organizationId?: string): Promise<Uint8Array> {
+    const url = `${this.baseUrl}${path}`
+    const effectiveOrgId = organizationId ?? this.defaultOrganizationId
+
+    const headers: Record<string, string> = {
+      Authorization: this.authHeader,
+    }
+
+    if (effectiveOrgId) {
+      headers['X-Active-Org-ID'] = effectiveOrgId
+    }
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers,
+      signal: AbortSignal.timeout(this.timeoutMs),
+    })
+
+    if (!response.ok) {
+      let errorBody: APIErrorBody = {}
+      try {
+        errorBody = (await response.json()) as APIErrorBody
+      } catch {
+        // ignore parse errors
+      }
+      const message =
+        errorBody.error ?? errorBody.message ?? `HTTP ${response.status} ${response.statusText}`
+      throw new FoundryDBError(message, response.status, errorBody)
+    }
+
+    const buffer = await response.arrayBuffer()
+    return new Uint8Array(buffer)
+  }
+
+  /**
+   * Issue a GET without authentication headers. Used for public well-known
+   * endpoints such as compliance signing key discovery.
+   */
+  async getPublic<T>(path: string): Promise<T> {
+    const url = `${this.baseUrl}${path}`
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(this.timeoutMs),
+    })
+
+    if (!response.ok) {
+      let errorBody: APIErrorBody = {}
+      try {
+        errorBody = (await response.json()) as APIErrorBody
+      } catch {
+        // ignore parse errors
+      }
+      const message =
+        errorBody.error ?? errorBody.message ?? `HTTP ${response.status} ${response.statusText}`
+      throw new FoundryDBError(message, response.status, errorBody)
+    }
+
+    return (await response.json()) as T
+  }
 }
 
 // ---- Camel-case conversion helpers ----
@@ -189,6 +256,7 @@ export class FoundryDB {
   readonly webhooks: WebhooksAPI
   readonly aiActions: AIActionsAPI
   readonly vectorSearch: VectorSearchAPI
+  readonly compliance: ComplianceAPI
 
   constructor(config: FoundryDBConfig) {
     const http = new HTTPClient(config)
@@ -208,5 +276,6 @@ export class FoundryDB {
     this.webhooks = new WebhooksAPI(http)
     this.aiActions = new AIActionsAPI(http)
     this.vectorSearch = new VectorSearchAPI(http)
+    this.compliance = new ComplianceAPI(http)
   }
 }

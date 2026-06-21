@@ -1396,6 +1396,119 @@ export interface VectorSearchResponse {
   topK: number
 }
 
+// ---- Compliance evidence packet types ----
+
+/** Attestation status of a single compliance control. */
+export type ControlAssertionStatus = 'attested' | 'not_attestable' | 'out_of_scope'
+
+/** One assessed control in a compliance packet. */
+export interface ControlAssertion {
+  controlId: string
+  title: string
+  assertion: string
+  status: ControlAssertionStatus
+  evidenceRefs: string[]
+}
+
+/** Audit log summary embedded in a compliance packet. */
+export interface ComplianceAuditLogSummary {
+  retentionPolicy: string
+  oldestEntryAt?: string
+  entryCount: number
+}
+
+/** High-level metrics embedded in a compliance packet. */
+export interface CompliancePacketSummary {
+  serviceCount: number
+  allServicesEuResidency: boolean
+  auditLog: ComplianceAuditLogSummary
+}
+
+/** Organization snapshot embedded in a compliance packet. */
+export interface ComplianceOrganizationSnapshot {
+  id: string
+  name: string
+  billingEmail?: string
+  country?: string
+}
+
+/**
+ * A signed compliance evidence packet. `schemaVersion` identifies the packet
+ * layout; consumers should gate on it before parsing `controls`.
+ */
+export interface CompliancePacket {
+  schemaVersion: string
+  framework: string
+  generatedAt: string
+  periodStart: string
+  periodEnd: string
+  organization: ComplianceOrganizationSnapshot
+  scopeBoundary: string
+  controls: ControlAssertion[]
+  summary: CompliancePacketSummary
+}
+
+/** Detached cryptographic signature over the canonical form of a packet. */
+export interface CompliancePacketSignature {
+  algorithm: string
+  keyId: string
+  value: string
+  canonicalSha256: string
+}
+
+/** A compliance packet together with its detached signature. */
+export interface CompliancePacketResponse {
+  packet: CompliancePacket
+  signature: CompliancePacketSignature
+}
+
+/**
+ * Response from generating a compliance report. Extends `CompliancePacketResponse`
+ * with the durable `reportId` that can be used to re-download the packet later.
+ */
+export interface GenerateComplianceReportResponse extends CompliancePacketResponse {
+  reportId: string
+}
+
+/**
+ * Index record for one generated compliance report. The full packet is
+ * not embedded; use `downloadComplianceReportJSON` or
+ * `downloadComplianceReportPDF` to retrieve it.
+ */
+export interface ComplianceReportRecord {
+  id: string
+  organizationId: string
+  framework: string
+  schemaVersion: string
+  periodStart: string
+  periodEnd: string
+  generatedAt: string
+  generatedBy: string
+  signingKeyId: string
+  algorithm: string
+  status: string
+  hasPdf: boolean
+}
+
+/** One entry in the compliance signing key set. */
+export interface ComplianceSigningKey {
+  keyId: string
+  algorithm: string
+  publicKey: string
+  active: boolean
+  retiredAt?: string
+}
+
+/**
+ * Well-known compliance signing key set. Published at
+ * `GET /.well-known/compliance-signing-keys` without authentication so that
+ * auditors and relying parties can verify packet signatures independently.
+ */
+export interface ComplianceSigningKeySet {
+  algorithm: string
+  keys: ComplianceSigningKey[]
+}
+
 // ---- Error types ----
 
 export interface APIErrorBody {

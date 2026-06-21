@@ -17,6 +17,8 @@ export { EmbeddingPipelinesAPI } from './embedding-pipelines.js'
 export { WebhooksAPI } from './webhooks.js'
 export { AIActionsAPI } from './ai-actions.js'
 export { VectorSearchAPI } from './vector-search.js'
+export { ComplianceAPI } from './compliance.js'
+export type { ComplianceFramework } from './compliance.js'
 export { FoundryDBError } from './types.js'
 export type {
   FoundryDBConfig,
@@ -144,4 +146,16 @@ export type {
   EdgeApplicationStatusItem,
   EdgeStatus,
   EdgeSettings,
+  ControlAssertionStatus,
+  ControlAssertion,
+  ComplianceAuditLogSummary,
+  CompliancePacketSummary,
+  ComplianceOrganizationSnapshot,
+  CompliancePacket,
+  CompliancePacketSignature,
+  CompliancePacketResponse,
+  GenerateComplianceReportResponse,
+  ComplianceReportRecord,
+  ComplianceSigningKey,
+  ComplianceSigningKeySet,
 } from './types.js'
