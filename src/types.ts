@@ -1509,6 +1509,23 @@ export interface ComplianceSigningKeySet {
   keys: ComplianceSigningKey[]
 }
 
+/**
+ * A compliance framework subscription for an organization. Controls which
+ * frameworks are active and billed for the organization.
+ */
+export interface ComplianceSubscription {
+  /** The compliance framework this subscription covers. */
+  framework: 'soc2' | 'gdpr_ropa' | 'dora' | 'eu_ai_act'
+  /** Whether the subscription is currently active. */
+  enabled: boolean
+  /** Monthly price for this framework in EUR. */
+  monthlyPriceEur: number
+  /** ISO 8601 timestamp when the organization subscribed to this framework. */
+  subscribedAt?: string
+  /** ISO 8601 timestamp when the subscription was canceled, if applicable. */
+  canceledAt?: string
+}
+
 // ---- Companion-app attachment types ----
 
 /**

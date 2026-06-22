@@ -160,6 +160,7 @@ export type {
   ComplianceReportRecord,
   ComplianceSigningKey,
   ComplianceSigningKeySet,
+  ComplianceSubscription,
   AttachmentKind,
   AttachmentCatalogEntry,
   AttachmentSummary,

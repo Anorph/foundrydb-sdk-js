@@ -5,13 +5,18 @@ import type {
   ComplianceReportRecord,
   CompliancePacketResponse,
   ComplianceSigningKeySet,
+  ComplianceSubscription,
 } from './types.js'
 
 /** Supported compliance frameworks. */
-export type ComplianceFramework = 'soc2' | 'gdpr_ropa' | string
+export type ComplianceFramework = 'soc2' | 'gdpr_ropa' | 'dora' | 'eu_ai_act' | string
 
 interface ListComplianceReportsResponse {
   reports: ComplianceReportRecord[]
+}
+
+interface ListComplianceSubscriptionsResponse {
+  subscriptions: ComplianceSubscription[]
 }
 
 /**
@@ -99,6 +104,69 @@ export class ComplianceAPI {
    */
   async complianceSigningKeys(): Promise<ComplianceSigningKeySet> {
     const raw = await this.http.getPublic<unknown>('/.well-known/compliance-signing-keys')
+    return toCamel<ComplianceSigningKeySet>(raw)
+  }
+
+  /**
+   * List all compliance framework subscriptions for the given organization.
+   * Each entry indicates whether the framework is currently enabled, its monthly
+   * price, and relevant timestamps.
+   *
+   * @param orgId - Organization ID to list subscriptions for.
+   */
+  async listComplianceSubscriptions(orgId: string): Promise<ComplianceSubscription[]> {
+    const raw = await this.http.get<unknown>(
+      `/organizations/${orgId}/compliance-subscriptions`,
+    )
+    const result = toCamel<ListComplianceSubscriptionsResponse>(raw)
+    return result.subscriptions
+  }
+
+  /**
+   * Subscribe the given organization to a compliance framework. Idempotent:
+   * if the organization is already subscribed, the existing subscription is
+   * returned unchanged.
+   *
+   * @param orgId - Organization ID to subscribe.
+   * @param framework - Compliance framework to enable, e.g. `'soc2'`.
+   */
+  async subscribeComplianceFramework(
+    orgId: string,
+    framework: ComplianceFramework,
+  ): Promise<ComplianceSubscription> {
+    const raw = await this.http.put<unknown>(
+      `/organizations/${orgId}/compliance-subscriptions/${framework}`,
+      {},
+    )
+    return toCamel<ComplianceSubscription>(raw)
+  }
+
+  /**
+   * Unsubscribe the given organization from a compliance framework. The
+   * subscription is canceled at the end of the current billing period.
+   *
+   * @param orgId - Organization ID to unsubscribe.
+   * @param framework - Compliance framework to disable, e.g. `'soc2'`.
+   */
+  async unsubscribeComplianceFramework(
+    orgId: string,
+    framework: ComplianceFramework,
+  ): Promise<void> {
+    await this.http.delete<void>(
+      `/organizations/${orgId}/compliance-subscriptions/${framework}`,
+    )
+  }
+
+  /**
+   * Rotate the platform's compliance signing key. The current active key is
+   * retired and a new key is generated and activated. All subsequent reports
+   * will be signed with the new key; existing reports remain verifiable via
+   * the retired key entry in the well-known key set.
+   *
+   * This is an admin-only operation.
+   */
+  async rotateComplianceSigningKey(): Promise<ComplianceSigningKeySet> {
+    const raw = await this.http.post<unknown>('/admin/compliance/signing-keys/rotate')
     return toCamel<ComplianceSigningKeySet>(raw)
   }
 }

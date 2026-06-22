@@ -238,6 +238,21 @@ writeFileSync('compliance-report.pdf', pdf)
 // Auditors can call this independently to verify packet signatures
 const keys = await client.compliance.complianceSigningKeys()
 keys.keys.forEach(k => console.log(k.keyId, k.algorithm, k.active))
+
+// List compliance framework subscriptions for an organization
+const subs = await client.compliance.listComplianceSubscriptions('org_abc')
+subs.forEach(s => console.log(s.framework, s.enabled, s.monthlyPriceEur))
+
+// Subscribe to a compliance framework
+const sub = await client.compliance.subscribeComplianceFramework('org_abc', 'dora')
+console.log(sub.framework, sub.subscribedAt)
+
+// Unsubscribe from a compliance framework
+await client.compliance.unsubscribeComplianceFramework('org_abc', 'dora')
+
+// Rotate the platform compliance signing key (admin only)
+const newKeySet = await client.compliance.rotateComplianceSigningKey()
+console.log(newKeySet.keys.find(k => k.active)?.keyId)
 ```
 
 Supported frameworks:
@@ -246,6 +261,8 @@ Supported frameworks:
 |-------|-------------|
 | `soc2` | SOC 2 Type II evidence packet |
 | `gdpr_ropa` | GDPR Art. 30 Record of Processing Activities |
+| `dora` | DORA (Digital Operational Resilience Act) evidence packet |
+| `eu_ai_act` | EU AI Act transparency evidence packet |
 
 ## Error Handling
 
