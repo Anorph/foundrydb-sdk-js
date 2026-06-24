@@ -507,32 +507,519 @@ export interface CreateEdgeDomainRequest {
 }
 
 /** Selects how the edge WAF treats matching requests for one app. */
-export type EdgeWAFMode = 'off' | 'detect' | string
+export type EdgeWAFMode = 'off' | 'detect' | 'block' | string
+
+/**
+ * Action a matching custom WAF rule takes: `block` denies the request with a
+ * 403 (only enforced in block waf_mode), `log` only records a match.
+ */
+export type EdgeWAFRuleAction = 'block' | 'log' | string
 
 /** Selects what a rate-limit bucket is keyed on. */
 export type EdgeRateLimitKey = 'ip' | 'api_key' | string
 
-/** Caches responses under one path prefix for a fixed TTL. */
+/**
+ * Counter location for a rate-limit bucket. Platform-set by the controller and
+ * only echoed on the settings response.
+ */
+export type EdgeRateLimitBackend = 'in_process' | 'valkey' | string
+
+/**
+ * Load-balancing policy across the combined upstream set (the primary auto
+ * origin plus the pool's additional origins).
+ */
+export type EdgeOriginLBPolicy =
+  | 'round_robin'
+  | 'weighted'
+  | 'least_conn'
+  | 'first'
+  | string
+
+/** Where an inbound API key is read from on a request. */
+export type EdgeAPIKeyLocation = 'header' | 'query' | string
+
+/** Action the bot-management heuristic takes on a flagged request. */
+export type EdgeBotAction = 'log' | 'block' | 'challenge' | string
+
+/** Action account-takeover protection takes when a threshold is crossed. */
+export type EdgeATOAction = 'alert' | 'ratelimit' | 'lock' | string
+
+/**
+ * Cache-key derivation for a cache rule. Each list narrows what the cache
+ * varies on; an empty key varies on the request path and method only.
+ */
+export interface EdgeCacheKey {
+  varyQueryParams?: string[]
+  varyHeaders?: string[]
+  varyCookies?: string[]
+}
+
+/**
+ * Caches responses under one path prefix for a fixed TTL. The cache-depth
+ * fields tune stale serving, the derived cache key, and request collapsing.
+ */
 export interface EdgeCacheRule {
   pathPrefix: string
   ttlSeconds: number
+  /** Serve a stale entry for up to this long while revalidating in the background. */
+  staleWhileRevalidateSeconds?: number
+  /** Serve a stale entry for up to this long when the origin errors. */
+  staleIfErrorSeconds?: number
+  /** Overrides how the cache key is derived for this rule. */
+  cacheKey?: EdgeCacheKey
+  /** Collapses concurrent misses for the same key into a single origin fetch. */
+  requestCollapsing?: boolean
 }
 
-/** Token-bucket rate limit enforced per PoP at the edge. */
+/**
+ * Token-bucket rate limit enforced per PoP at the edge. `requestsPerSecond`,
+ * `burst` and `key` are customer-tunable; `backend`, `backendAddress` and
+ * `nodeCount` are platform-set and only echoed on a response.
+ */
 export interface EdgeRateLimit {
   requestsPerSecond: number
   burst: number
   key: EdgeRateLimitKey
+  /** Counter location. Empty is treated as in-process. Platform-set. */
+  backend?: EdgeRateLimitBackend
+  /** Valkey host:port when backend is valkey; empty otherwise. Platform-set. */
+  backendAddress?: string
+  /** Number of serving nodes the in-process limit is spread across. Platform-set. */
+  nodeCount?: number
+}
+
+/** Matches a named request header's value against a regex. */
+export interface EdgeWAFRuleHeaderMatch {
+  name: string
+  valuePattern: string
 }
 
 /**
- * Customer-tunable edge settings. Domains and origin are platform-derived and
- * are not settable here.
+ * A safe, structured per-app WAF rule the edge compiles into a coraza SecRule.
+ * The customer supplies only opaque metadata and a small set of match patterns,
+ * never raw SecRule directive text. All match fields are optional; at least one
+ * is required, and multiple set fields are ANDed.
+ */
+export interface EdgeWAFRule {
+  name?: string
+  description?: string
+  uriPattern?: string
+  method?: string
+  header?: EdgeWAFRuleHeaderMatch
+  sourceIpCidr?: string
+  action: EdgeWAFRuleAction
+}
+
+/**
+ * One WAF managed-rule exclusion: suppress a core-rule-set rule entirely (by
+ * `ruleId`) or only for a named `target`. At least one of the two is set.
+ */
+export interface EdgeWAFExclusion {
+  ruleId?: number
+  target?: string
+}
+
+/**
+ * Per-IP volumetric DDoS protection at the edge. Empty knobs fall back to the
+ * platform defaults.
+ */
+export interface EdgeDDoSProfile {
+  enabled: boolean
+  perIpRequestsPerSecond?: number
+  perIpBurst?: number
+  perIpConnCap?: number
+}
+
+/**
+ * Bot-management heuristics at the edge. `action` selects what a flagged
+ * request gets; the boolean toggles enable the known-bad-bot list and the
+ * rate-based heuristic.
+ */
+export interface EdgeBotManagement {
+  enabled: boolean
+  action?: EdgeBotAction
+  knownBadBots?: boolean
+  rateBasedHeuristic?: boolean
+}
+
+/**
+ * Account-takeover protection: watches authentication endpoints for credential
+ * stuffing and takes `action` when a per-IP or per-username failure threshold
+ * is crossed.
+ */
+export interface EdgeATOProtection {
+  enabled: boolean
+  authPaths?: string[]
+  failureStatusCodes?: number[]
+  perIpThresholdPerMin?: number
+  perUsernameThresholdPerMin?: number
+  usernameField?: string
+  action?: EdgeATOAction
+}
+
+/** One JWT claim that must be present (and equal to `value`) for a request to pass. */
+export interface EdgeJWTClaim {
+  name: string
+  value: string
+}
+
+/**
+ * JWT validation at the edge for the listed paths. Tokens are verified against
+ * a JWKS URL or static public keys; matching claims can be forwarded to the
+ * origin in a header. Carries no secret.
+ */
+export interface EdgeJWTAuth {
+  enabled: boolean
+  paths?: string[]
+  jwksUrl?: string
+  publicKeys?: string[]
+  issuer?: string
+  audiences?: string[]
+  requiredClaims?: EdgeJWTClaim[]
+  forwardClaimsHeader?: string
+}
+
+/**
+ * Signed-URL enforcement at the edge. The signing secret is referenced by name
+ * (a platform secret) and never carried inline; the same shape is echoed on the
+ * response because no secret value is stored.
+ */
+export interface EdgeSignedURLs {
+  enabled: boolean
+  paths?: string[]
+  /** Reference name of the signing secret, never the secret value itself. */
+  secretName?: string
+  ttlSeconds?: number
+  /** Query parameter carrying the signature. Default "sig". */
+  signatureParam?: string
+  /** Query parameter carrying the expiry. Default "exp". */
+  expiresParam?: string
+}
+
+/**
+ * One inbound API key on the settings request. `key` is the PLAINTEXT key the
+ * controller hashes and discards; it is write-only and never echoed. `rateTier`
+ * is an optional per-key rate limit.
+ */
+export interface EdgeAPIKeyRequest {
+  name: string
+  /** Plaintext key, write-only, hashed server-side, never returned. */
+  key?: string
+  rateTier?: EdgeRateLimit
+}
+
+/**
+ * Inbound API-key authentication on the settings request. `keys` carries the
+ * plaintext key material that the controller hashes and discards.
+ */
+export interface EdgeAPIKeyAuthRequest {
+  enabled: boolean
+  paths?: string[]
+  /** Where the key is read from. Default "header". */
+  keyLocation?: EdgeAPIKeyLocation
+  /** Header or query parameter name carrying the key. Default "X-API-Key". */
+  keyName?: string
+  keys?: EdgeAPIKeyRequest[]
+}
+
+/**
+ * Non-secret view of one configured API key, echoed on the settings response.
+ * Carries no hash and no plaintext.
+ */
+export interface EdgeAPIKeyView {
+  name: string
+  rateTier?: EdgeRateLimit
+}
+
+/**
+ * Non-secret view of the API-key auth setting echoed on the settings response.
+ * The `keys` list carries only names and optional per-key rate tiers.
+ */
+export interface EdgeAPIKeyAuthView {
+  enabled: boolean
+  paths?: string[]
+  keyLocation?: EdgeAPIKeyLocation
+  keyName?: string
+  keys?: EdgeAPIKeyView[]
+}
+
+/**
+ * Redirects a request whose path exactly matches `fromPath` to `toUrl` with an
+ * HTTP redirect status (301, 302, 307, 308; 0 means the default 302). It
+ * short-circuits at the edge before WAF, cache, or origin.
+ */
+export interface EdgeRedirectRule {
+  fromPath: string
+  toUrl: string
+  statusCode?: number
+}
+
+/**
+ * Closed enum of actions an edge rule may take. Terminal actions (redirect,
+ * block, origin_override) short-circuit the rule chain (first match wins);
+ * non-terminal actions (set_header, rewrite, continue) fall through.
+ */
+export type EdgeRuleActionType =
+  | 'redirect'
+  | 'set_header'
+  | 'rewrite'
+  | 'block'
+  | 'origin_override'
+  | 'continue'
+  | string
+
+/**
+ * Matches a named request header. Exactly one of `value` (exact) or `regex`
+ * (RE2) is used; `value` takes precedence when both are set.
+ */
+export interface EdgeRuleHeaderMatch {
+  name: string
+  value?: string
+  regex?: string
+}
+
+/**
+ * ANDed set of conditions an edge rule matches on. Every set condition must
+ * hold; an empty match matches every request.
+ */
+export interface EdgeRuleMatch {
+  pathPrefix?: string
+  pathRegex?: string
+  methods?: string[]
+  header?: EdgeRuleHeaderMatch
+}
+
+/**
+ * Closed-enum action a matched edge rule takes. Only the fields relevant to
+ * `type` are used.
+ */
+export interface EdgeRuleAction {
+  type: EdgeRuleActionType
+  redirectTo?: string
+  redirectStatus?: number
+  setRequestHeaders?: Record<string, string>
+  removeRequestHeaders?: string[]
+  setResponseHeaders?: Record<string, string>
+  removeResponseHeaders?: string[]
+  rewrite?: string
+  blockStatus?: number
+  originOverride?: EdgeOrigin
+}
+
+/**
+ * One entry in the additive, ordered, composable edge rules engine: a match
+ * plus a closed-enum action. Rules are evaluated in ascending priority order
+ * (ties broken by declared index) and compose with the fixed edge features at a
+ * single documented precedence point.
+ */
+export interface EdgeRule {
+  name?: string
+  priority?: number
+  match: EdgeRuleMatch
+  action: EdgeRuleAction
+}
+
+/**
+ * Manipulates HTTP headers at the edge. `requestSet`/`requestRemove` apply to
+ * the request forwarded to the origin; `responseSet`/`responseRemove` apply to
+ * the response returned to the client.
+ */
+export interface EdgeHeaderRules {
+  requestSet?: Record<string, string>
+  requestRemove?: string[]
+  responseSet?: Record<string, string>
+  responseRemove?: string[]
+}
+
+/**
+ * Per-app CORS policy the edge enforces. `allowedOrigins` is either the single
+ * wildcard "*" (only when `allowCredentials` is false) or a list of concrete
+ * http(s) origins.
+ */
+export interface EdgeCORS {
+  allowedOrigins?: string[]
+  allowedMethods?: string[]
+  allowedHeaders?: string[]
+  exposeHeaders?: string[]
+  allowCredentials?: boolean
+  maxAgeSeconds?: number
+}
+
+/**
+ * Puts an app behind a maintenance page at the edge. When enabled, every client
+ * except those whose connection IP is inside a `bypassIps` CIDR gets the
+ * maintenance response.
+ */
+export interface EdgeMaintenance {
+  enabled: boolean
+  statusCode?: number
+  body?: string
+  bypassIps?: string[]
+}
+
+/**
+ * Enables gzip response compression at the edge. `extraContentTypes` adds
+ * further content-types beyond the runtime defaults.
+ */
+export interface EdgeCompression {
+  enabled: boolean
+  extraContentTypes?: string[]
+}
+
+/**
+ * Enables an HTTP Strict-Transport-Security response header at the edge.
+ * Preload requires `includeSubdomains` and a max-age of at least one year.
+ */
+export interface EdgeHSTS {
+  enabled: boolean
+  maxAgeSeconds?: number
+  includeSubdomains?: boolean
+  preload?: boolean
+}
+
+/**
+ * Injects a per-request correlation id at the edge on both the request
+ * forwarded to the origin and the response returned to the client. Empty
+ * `headerName` defaults to X-Request-ID.
+ */
+export interface EdgeRequestID {
+  enabled: boolean
+  headerName?: string
+}
+
+/**
+ * Routes a sticky subset of an app's traffic into a canary (B) arm at the edge.
+ * A request is routed into the canary arm when it carries `matchCookie` or
+ * `matchHeader` (exactly one is set) with `matchValue`.
+ */
+export interface EdgeCanary {
+  enabled: boolean
+  matchCookie?: string
+  matchHeader?: string
+  matchValue?: string
+  variantHeaderName?: string
+  variantHeaderValue?: string
+}
+
+/** Active (out-of-band) origin health probing. */
+export interface EdgeOriginHealthCheckActive {
+  enabled: boolean
+  path?: string
+  intervalSeconds?: number
+  timeoutSeconds?: number
+  expectStatus?: number
+}
+
+/** Passive (in-band) origin health detection. */
+export interface EdgeOriginHealthCheckPassive {
+  maxFails?: number
+  failDurationSeconds?: number
+  unhealthyStatus?: number[]
+}
+
+/** Per-app origin health-check policy. Either or both may be set. */
+export interface EdgeOriginHealthCheck {
+  active?: EdgeOriginHealthCheckActive
+  passive?: EdgeOriginHealthCheckPassive
+}
+
+/**
+ * One upstream the edge proxies an app's traffic to. `floatingIp` is set only
+ * on the platform-derived primary origin and is read-only.
+ */
+export interface EdgeOrigin {
+  floatingIp?: string
+  host?: string
+  port: number
+  sni?: string
+  weight?: number
+  backup?: boolean
+}
+
+/**
+ * Per-app set of additional origins beyond the primary auto origin, with the
+ * load-balancing policy and failover knobs.
+ */
+export interface EdgeOriginPool {
+  additionalOrigins?: EdgeOrigin[]
+  lbPolicy?: EdgeOriginLBPolicy
+  tryDurationSeconds?: number
+  retries?: number
+  retryStatuses?: number[]
+}
+
+/**
+ * One inbound Basic Auth account on the settings request. `password` is the
+ * PLAINTEXT password the controller bcrypt-hashes and discards; it is
+ * write-only and never echoed. An empty password for an existing username keeps
+ * that account's stored hash.
+ */
+export interface EdgeBasicAuthAccountRequest {
+  username: string
+  password?: string
+}
+
+/**
+ * Inbound Basic Auth setting on the settings request. It carries plaintext
+ * passwords that the controller hashes and discards.
+ */
+export interface EdgeBasicAuthRequest {
+  enabled: boolean
+  accounts?: EdgeBasicAuthAccountRequest[]
+}
+
+/**
+ * Customer-tunable subset of the edge config, written via PUT
+ * /app-services/{id}/edge/settings. Domains and origin are platform-derived and
+ * not settable here. Each list/pointer field replaces the stored value
+ * wholesale; an empty or nil value clears the corresponding setting.
  */
 export interface EdgeSettingsRequest {
   cacheRules?: EdgeCacheRule[]
   rateLimit?: EdgeRateLimit
   wafMode?: EdgeWAFMode
+  customWafRules?: EdgeWAFRule[]
+  ipAllowList?: string[]
+  ipDenyList?: string[]
+  redirects?: EdgeRedirectRule[]
+  headerRules?: EdgeHeaderRules
+  cors?: EdgeCORS
+  maintenance?: EdgeMaintenance
+  compression?: EdgeCompression
+  maxRequestBodyBytes?: number
+  allowedMethods?: string[]
+  basicAuth?: EdgeBasicAuthRequest
+  blockedPaths?: string[]
+  hsts?: EdgeHSTS
+  requestId?: EdgeRequestID
+  canary?: EdgeCanary
+  healthCheck?: EdgeOriginHealthCheck
+  originPool?: EdgeOriginPool
+  /**
+   * Opts the app into staged per-node/per-PoP config rollouts: a new config
+   * version is dispatched to a canary subset (one node, or one PoP) first and
+   * held for a manual promote (with auto-abort on a canary 5xx spike) instead of
+   * being dispatched fleet-wide immediately.
+   */
+  canaryRolloutEnabled?: boolean
+  /** Additive, ordered, composable rules engine list. Replaces the stored list wholesale. */
+  rules?: EdgeRule[]
+  /** JWT validation at the edge for the listed paths. */
+  jwtAuth?: EdgeJWTAuth
+  /** Signed-URL enforcement at the edge. */
+  signedUrls?: EdgeSignedURLs
+  /** Inbound API-key authentication; plaintext key material is write-only. */
+  apiKeyAuth?: EdgeAPIKeyAuthRequest
+  /** WAF core-rule-set paranoia level (1..4); 0 selects the platform default PL1. */
+  wafParanoiaLevel?: number
+  /** WAF managed-rule exclusions. */
+  wafRuleExclusions?: EdgeWAFExclusion[]
+  /** Per-IP volumetric DDoS protection. */
+  ddosProfile?: EdgeDDoSProfile
+  /** Bot-management heuristics. */
+  botManagement?: EdgeBotManagement
+  /** Account-takeover protection on authentication endpoints. */
+  atoProtection?: EdgeATOProtection
 }
 
 /** Convergence state of one PoP in the edge fleet. */
@@ -558,14 +1045,309 @@ export interface EdgeStatus {
 }
 
 /**
- * Customer-tunable edge settings returned after an update, plus the config
- * version the fleet will converge on.
+ * Customer-tunable edge settings returned after an update (and on GET
+ * .../edge/settings). Basic Auth password hashes are never echoed; only the
+ * enabled flag and usernames are returned. `signedUrls` and `apiKeyAuth` are
+ * projected to their non-secret view shapes.
  */
 export interface EdgeSettings {
   cacheRules?: EdgeCacheRule[]
   rateLimit?: EdgeRateLimit
   wafMode: EdgeWAFMode
+  customWafRules?: EdgeWAFRule[]
+  ipAllowList?: string[]
+  ipDenyList?: string[]
+  redirects?: EdgeRedirectRule[]
+  headerRules?: EdgeHeaderRules
+  cors?: EdgeCORS
+  maintenance?: EdgeMaintenance
+  compression?: EdgeCompression
+  maxRequestBodyBytes?: number
+  allowedMethods?: string[]
+  basicAuthEnabled: boolean
+  basicAuthUsernames?: string[]
+  blockedPaths?: string[]
+  hsts?: EdgeHSTS
+  requestId?: EdgeRequestID
+  canary?: EdgeCanary
+  healthCheck?: EdgeOriginHealthCheck
+  originPool?: EdgeOriginPool
+  /** Whether the app opts into staged per-node/per-PoP config rollouts. */
+  canaryRolloutEnabled: boolean
+  /** Additive, ordered, composable rules engine list; empty means no rules. */
+  rules?: EdgeRule[]
+  /** JWT validation echoed back; carries no secret. */
+  jwtAuth?: EdgeJWTAuth
+  /** Signed-URL enforcement echoed back; the secret is referenced by name only. */
+  signedUrls?: EdgeSignedURLs
+  /** Non-secret view of API-key auth: names and per-key rate tiers, no key material. */
+  apiKeyAuth?: EdgeAPIKeyAuthView
+  /** WAF core-rule-set paranoia level (1..4); 0 means platform default PL1. */
+  wafParanoiaLevel?: number
+  /** WAF managed-rule exclusions. */
+  wafRuleExclusions?: EdgeWAFExclusion[]
+  /** Per-IP volumetric DDoS protection. */
+  ddosProfile?: EdgeDDoSProfile
+  /** Bot-management heuristics. */
+  botManagement?: EdgeBotManagement
+  /** Account-takeover protection. */
+  atoProtection?: EdgeATOProtection
   configVersion: number
+}
+
+/**
+ * Body of POST /app-services/{id}/edge/cache/purge. Set exactly one form:
+ * `all` drops every cached entry for the app on the fleet, or `paths`
+ * invalidates the cached entries under each listed absolute path.
+ */
+export interface EdgeCachePurgeRequest {
+  all?: boolean
+  paths?: string[]
+}
+
+/**
+ * Rolling purge plan the request started. The purge flushes nodes one at a time
+ * in the background, so the endpoint returns the plan rather than the completed
+ * result.
+ */
+export interface EdgeCachePurgeResponse {
+  plannedNodes: number
+  nodeIds?: string[]
+  rolling: boolean
+}
+
+/** One (path, count) entry of a top-paths or suspicious-paths list. */
+export interface EdgeMetricsTopPath {
+  path: string
+  count: number
+}
+
+/** Request totals broken down by HTTP status class. */
+export interface EdgeStatusClassCounts {
+  '2xx': number
+  '3xx': number
+  '4xx': number
+  '5xx': number
+}
+
+/** Cache hit/miss summary with the derived hit ratio. */
+export interface EdgeCacheCounts {
+  hit: number
+  miss: number
+  hitRatio: number
+}
+
+/** Latency percentiles (milliseconds) estimated from the latency histogram. */
+export interface EdgeLatencyPercentiles {
+  p50: number
+  p95: number
+  p99: number
+}
+
+/**
+ * Per-scope security/threat summary: the WAF detection total plus the observed
+ * top paths matching credential-scanner shapes.
+ */
+export interface EdgeAnalyticsThreat {
+  wafDetectionsTotal: number
+  suspiciousPaths: EdgeMetricsTopPath[]
+}
+
+/**
+ * Folded edge analytics for one scope (the app total or one PoP) over the
+ * window. `zone` is empty for the app-wide total.
+ */
+export interface EdgeAnalyticsSummary {
+  zone?: string
+  requestsTotal: number
+  byStatusClass: EdgeStatusClassCounts
+  errorRatePct: number
+  cache: EdgeCacheCounts
+  rateLimitedTotal: number
+  wafDetectionsTotal: number
+  wafByRule?: Record<string, number>
+  latencyMs: EdgeLatencyPercentiles
+  topPaths: EdgeMetricsTopPath[]
+  threat: EdgeAnalyticsThreat
+}
+
+/**
+ * GET /app-services/{id}/edge/analytics response: an account-scoped,
+ * server-aggregated edge analytics summary for one app over a time window,
+ * folded across the app's PoPs with a per-PoP breakdown.
+ */
+export interface EdgeAnalytics {
+  windowMinutes: number
+  total: EdgeAnalyticsSummary
+  pops: EdgeAnalyticsSummary[]
+}
+
+/** How a log drain transforms the client IP before a line leaves the platform. */
+export type EdgeIPRedactionMode =
+  | 'full'
+  | 'truncated'
+  | 'hashed'
+  | 'omitted'
+  | string
+
+/**
+ * Per-drain privacy policy applied to every access log line before export.
+ * Authorization and Cookie are always dropped regardless of `headerAllowList`.
+ */
+export interface EdgeRedactionPolicy {
+  ipMode?: EdgeIPRedactionMode
+  ipHashSalt?: string
+  stripQueryString?: boolean
+  headerAllowList?: string[]
+}
+
+/**
+ * Streams an app's per-request edge access logs to a customer destination. The
+ * destination configuration is write-only and never returned.
+ */
+export interface EdgeLogDrain {
+  id: string
+  appServiceId: string
+  name: string
+  description: string
+  destinationType: string
+  redactionPolicy: EdgeRedactionPolicy
+  isEnabled: boolean
+  exportIntervalSeconds: number
+  lastExportAt?: string
+  lastExportError?: string
+  consecutiveFailures: number
+  createdAt: string
+  updatedAt: string
+}
+
+/**
+ * Creates an edge access-log drain. Configuration is destination-specific (s3:
+ * endpoint/region/bucket/prefix/access_key_id/secret_access_key; webhook:
+ * url/auth_header_name/auth_header_value).
+ */
+export interface CreateEdgeLogDrainRequest {
+  name: string
+  description?: string
+  destinationType: string
+  configuration: Record<string, unknown>
+  redactionPolicy?: EdgeRedactionPolicy
+  isEnabled?: boolean
+  exportIntervalSeconds?: number
+}
+
+/** Partial update of a log drain; omitted fields keep their value. */
+export interface UpdateEdgeLogDrainRequest {
+  name?: string
+  description?: string
+  destinationType?: string
+  configuration?: Record<string, unknown>
+  redactionPolicy?: EdgeRedactionPolicy
+  isEnabled?: boolean
+  exportIntervalSeconds?: number
+}
+
+export interface ListEdgeLogDrainsResponse {
+  drains: EdgeLogDrain[]
+}
+
+/** Reports whether a drain's destination is reachable. */
+export interface EdgeLogDrainTestResult {
+  ok: boolean
+  error?: string
+}
+
+/**
+ * One entry in the append-only edge config version history. The live edge
+ * configuration is the source of truth for what is active; this history is the
+ * immutable audit trail and the source a rollback restores from.
+ */
+export interface EdgeConfigVersion {
+  version: number
+  configHash: string
+  /**
+   * What produced this version: "reconcile" (a platform recompute bump),
+   * "settings" (a customer settings write), or "rollback" (a restore of a prior
+   * version's customer-settable subset).
+   */
+  source: string
+  /** User that initiated the change, when attributable. Null for reconciler bumps. */
+  createdBy?: string
+  createdAt: string
+  /** Whether this version is the currently active (live) version. */
+  active: boolean
+  /** For a rollback version, the version whose subset it restored. */
+  rolledBackFrom?: number
+}
+
+/**
+ * GET /app-services/{id}/edge/versions response: the app's edge config version
+ * history (newest first, bounded) and the live active version.
+ */
+export interface EdgeConfigVersions {
+  activeVersion: number
+  versions: EdgeConfigVersion[]
+}
+
+/**
+ * Names the version to roll back to. Supply exactly one of `toVersion` (an
+ * explicit positive version) or `to` set to "previous".
+ */
+export interface EdgeRollbackRequest {
+  toVersion?: number
+  to?: string
+}
+
+/**
+ * Reports the new active version a rollback produced. The rollback writes a NEW
+ * forward version restoring the target's customer-settable subset; it never
+ * mutates the history.
+ */
+export interface EdgeRollbackResponse {
+  activeVersion: number
+  rolledBackFrom: number
+  source: string
+}
+
+/**
+ * One staged edge config rollout. A rollout stages a new config version to a
+ * canary subset (one node, or one PoP) first, then either promotes it to the
+ * rest of the fleet or aborts.
+ */
+export interface EdgeRollout {
+  id: string
+  targetVersion: number
+  /**
+   * One of "canary" (held on the subset), "promoting" (fanning out), "promoted"
+   * (whole fleet converged), or "aborted" (the rest was never given the version).
+   */
+  phase: string
+  /** "node" (selector is a VM UUID) or "pop" (selector is a zone code). */
+  canaryScope: string
+  canarySelector?: string
+  startedAt: string
+  updatedAt: string
+  promotedAt?: string
+  abortedAt?: string
+  abortReason?: string
+}
+
+/**
+ * GET /app-services/{id}/edge/rollout response: the app's current (or most
+ * recent) rollout. `active` reports whether the rollout is in a non-terminal
+ * phase; `rollout` is null when the app has never had a rollout.
+ */
+export interface EdgeRolloutStatus {
+  active: boolean
+  rollout?: EdgeRollout
+}
+
+/**
+ * Carries an optional operator note recorded as the rollout's abort reason. An
+ * empty reason records a default "manual abort" note.
+ */
+export interface EdgeRolloutAbortRequest {
+  reason?: string
 }
 
 // ---- Auth GDPR erasure types ----
