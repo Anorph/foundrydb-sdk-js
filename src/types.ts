@@ -1350,6 +1350,197 @@ export interface EdgeRolloutAbortRequest {
   reason?: string
 }
 
+// ---- Edge fleet administration (admin only) ----
+//
+// The platform-owned edge gateway PoPs (points of presence) are created,
+// scaled, rolled, and retired only through the admin endpoints under
+// /admin/edge. A PoP is one edge service with nodeCount >= 2 (a primary that
+// holds the serving floating IP plus one or more hot standbys), giving in-house
+// intra-PoP high availability via floating-IP handoff on failure.
+
+/**
+ * The admin-facing shape of one edge PoP. `nodeCount` and `targetNodeCount`
+ * expose the PoP's primary-plus-standby sizing for HA.
+ */
+export interface EdgeNode {
+  id: string
+  name: string
+  zone: string
+  planName: string
+  status: string
+  nodeCount: number
+  targetNodeCount: number
+}
+
+/** Wraps the admin list-nodes envelope. */
+export interface ListEdgeNodesResponse {
+  nodes: EdgeNode[]
+}
+
+/**
+ * Provisions one new edge PoP via POST /admin/edge/nodes. `zone` is required;
+ * the service name is derived. `nodeCount` optionally widens the PoP beyond the
+ * default primary-plus-standby pair; values below the default are raised to it.
+ */
+export interface CreateEdgeNodeRequest {
+  zone: string
+  planName?: string
+  nodeCount?: number
+}
+
+/**
+ * Sets an edge PoP's desired VM count via PATCH /admin/edge/nodes/{nodeId}.
+ * `nodeCount` must be at least 1; 2 or more keeps the PoP highly available.
+ */
+export interface EdgeNodeScaleRequest {
+  nodeCount: number
+}
+
+/**
+ * An edge PoP's image-roll progress. `inProgress` is true while any node still
+ * predates the roll request; `remainingOldNodes` counts those old running nodes
+ * and `replacedNodes` counts the running nodes already on the new image.
+ */
+export interface EdgeRollStatus {
+  inProgress: boolean
+  requestedAt?: string
+  targetNodes: number
+  runningNodes: number
+  remainingOldNodes: number
+  replacedNodes: number
+}
+
+/**
+ * The static edge autoscale policy (display only). None of these values feeds a
+ * live scaling decision from the overview endpoint.
+ */
+export interface EdgeAutoscaleConfig {
+  enabled: boolean
+  maxNodes: number
+  scaleUpRps: number
+  scaleDownRps: number
+  cooldownSeconds: number
+  lookbackSeconds: number
+}
+
+/**
+ * Per-PoP autoscale telemetry for display; it never influences scaling. It is
+ * present only when current load or an autoscaler evaluation is available.
+ */
+export interface EdgeAutoscaleState {
+  currentRps: number
+  perNodeRps: number
+  lastDecision: string
+  lastActionAt?: string
+  cooldownRemainingSeconds: number
+}
+
+/**
+ * One VM in an edge PoP. `isServing` marks the node currently holding the
+ * serving floating IP.
+ */
+export interface EdgeOverviewNode {
+  id: string
+  name: string
+  role: string
+  status: string
+  isServing: boolean
+}
+
+/**
+ * An in-flight HA auto-recovery cycle for a PoP (self-heal replacement,
+ * failover, scale-out). Present on an overview row only while recovery is
+ * active.
+ */
+export interface EdgeRecoveryStatus {
+  inProgress: boolean
+  phase?: string
+  startedAt?: string
+  estimatedEta?: string
+}
+
+/**
+ * One PoP row of the edge overview: its node roster, serving floating IP, node
+ * deficit, in-flight recovery status, and current load.
+ */
+export interface EdgeOverviewPoP {
+  id: string
+  name: string
+  zone: string
+  planName: string
+  status: string
+  nodeCount: number
+  targetNodeCount: number
+  deficit: number
+  servingFip?: string
+  recovery?: EdgeRecoveryStatus
+  nodes: EdgeOverviewNode[]
+  autoscaleState?: EdgeAutoscaleState
+}
+
+/**
+ * GET /admin/edge/overview response: one consolidated, read-only snapshot of
+ * the edge fleet for the admin console (the static autoscale policy plus one row
+ * per PoP).
+ */
+export interface EdgeOverview {
+  autoscale: EdgeAutoscaleConfig
+  pops: EdgeOverviewPoP[]
+}
+
+/** Aggregated HA recovery activity for one service kind. */
+export interface EdgeRecoveryByKind {
+  serviceKind: string
+  attempts: number
+  errors: number
+  avgDurationSeconds: number
+}
+
+/** One service's current node deficit. */
+export interface EdgeRecoveryDeficit {
+  serviceId: string
+  deficit: number
+}
+
+/** The failed-node reconciler loop counters. */
+export interface EdgeReconcilerTicks {
+  scanned: number
+  candidatesFound: number
+  queryFailed: number
+}
+
+/**
+ * GET /admin/edge/recovery response: a snapshot of the shared HA recovery
+ * telemetry read from the in-process metrics gatherer.
+ */
+export interface EdgeRecovery {
+  byKind: EdgeRecoveryByKind[]
+  deficitByService: EdgeRecoveryDeficit[]
+  reconcilerTicks: EdgeReconcilerTicks
+}
+
+/**
+ * One app routed through the edge, with the PoP zone it is served from and its
+ * measured request rate over the window. `requestsPerSec` is zero for a
+ * linked-but-idle app.
+ */
+export interface EdgeRouteApp {
+  serviceId: string
+  name: string
+  status: string
+  zone: string
+  requestsPerSec: number
+}
+
+/**
+ * GET /admin/edge/routes response: the apps currently routed through the edge
+ * and their per-PoP request rate, ordered busiest first.
+ */
+export interface EdgeRoutes {
+  windowMinutes: number
+  apps: EdgeRouteApp[]
+}
+
 // ---- Auth GDPR erasure types ----
 
 /**

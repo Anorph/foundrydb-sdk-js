@@ -20,6 +20,14 @@ import type {
   EdgeRollbackResponse,
   EdgeRolloutStatus,
   EdgeRolloutAbortRequest,
+  EdgeNode,
+  ListEdgeNodesResponse,
+  CreateEdgeNodeRequest,
+  EdgeNodeScaleRequest,
+  EdgeRollStatus,
+  EdgeOverview,
+  EdgeRecovery,
+  EdgeRoutes,
 } from './types.js'
 
 /**
@@ -284,5 +292,112 @@ export class EdgeAPI {
   ): Promise<void> {
     const body = toSnake(req)
     await this.http.post(`/app-services/${appServiceId}/edge/rollout/abort`, body)
+  }
+
+  // ---- Edge fleet administration (admin only) ----
+  //
+  // The platform-owned edge gateway PoPs are created, scaled, rolled, and
+  // retired only through the admin endpoints under /admin/edge. A PoP is one
+  // edge service with nodeCount >= 2 (a primary that holds the serving floating
+  // IP plus one or more hot standbys) for intra-PoP high availability.
+
+  /**
+   * List the live edge fleet (admin only).
+   */
+  async listEdgeNodes(): Promise<EdgeNode[]> {
+    const raw = await this.http.get<unknown>(`/admin/edge/nodes`)
+    const result = toCamel<ListEdgeNodesResponse>(raw)
+    return result.nodes ?? []
+  }
+
+  /**
+   * Provision a new edge PoP in the requested zone (admin only). The edge state
+   * machine drives it from Pending to Running; poll {@link listEdgeNodes} for
+   * status.
+   */
+  async createEdgeNode(req: CreateEdgeNodeRequest): Promise<EdgeNode> {
+    const body = toSnake(req)
+    const raw = await this.http.post<unknown>(`/admin/edge/nodes`, body)
+    return toCamel<EdgeNode>(raw)
+  }
+
+  /**
+   * Set an edge PoP's desired VM count (admin only), backfilling standbys to
+   * scale up or retiring the newest standbys (never the primary) to scale down.
+   * The PoP must be Running; the change converges asynchronously.
+   */
+  async scaleEdgeNode(nodeId: string, req: EdgeNodeScaleRequest): Promise<void> {
+    const body = toSnake(req)
+    await this.http.patch(`/admin/edge/nodes/${nodeId}`, body)
+  }
+
+  /**
+   * Queue an edge PoP for deletion through the standard deletion states (admin
+   * only). The node is removed asynchronously.
+   */
+  async deleteEdgeNode(nodeId: string): Promise<void> {
+    await this.http.delete(`/admin/edge/nodes/${nodeId}`)
+  }
+
+  /**
+   * Begin a graceful, one-node-at-a-time roll of an edge PoP onto the current
+   * active base template (admin only). The PoP keeps serving throughout. It is
+   * idempotent: if a roll is already in progress it returns the current status
+   * instead of starting a second one.
+   */
+  async startEdgeRoll(nodeId: string): Promise<EdgeRollStatus> {
+    const raw = await this.http.post<unknown>(`/admin/edge/nodes/${nodeId}/roll`)
+    return toCamel<EdgeRollStatus>(raw)
+  }
+
+  /**
+   * Report an edge PoP's current roll progress (admin only).
+   */
+  async getEdgeRoll(nodeId: string): Promise<EdgeRollStatus> {
+    const raw = await this.http.get<unknown>(`/admin/edge/nodes/${nodeId}/roll`)
+    return toCamel<EdgeRollStatus>(raw)
+  }
+
+  /**
+   * Clear an edge PoP's roll marker so the reconciler stops retiring further
+   * nodes (admin only). Any in-flight replacement completes normally.
+   */
+  async cancelEdgeRoll(nodeId: string): Promise<void> {
+    await this.http.delete(`/admin/edge/nodes/${nodeId}/roll`)
+  }
+
+  /**
+   * Return the consolidated read-only edge fleet snapshot (admin only): the
+   * autoscale policy plus one row per PoP with its node roster, serving floating
+   * IP, node deficit, in-flight recovery status, and load.
+   */
+  async getEdgeOverview(): Promise<EdgeOverview> {
+    const raw = await this.http.get<unknown>(`/admin/edge/overview`)
+    return toCamel<EdgeOverview>(raw)
+  }
+
+  /**
+   * Return a snapshot of the shared HA recovery telemetry (admin only): recovery
+   * attempts, errors, and average duration per service kind; the failed-node
+   * reconciler loop counters; and the per-service node deficit.
+   */
+  async getEdgeRecovery(): Promise<EdgeRecovery> {
+    const raw = await this.http.get<unknown>(`/admin/edge/recovery`)
+    return toCamel<EdgeRecovery>(raw)
+  }
+
+  /**
+   * Return the live edge routing topology (admin only): the apps routed through
+   * the edge and their measured per-PoP request rate. Pass `windowMinutes` to
+   * set the aggregation window (0 or omitted uses the server default of 5
+   * minutes; values above 1440 are clamped server-side).
+   */
+  async getEdgeRoutes(windowMinutes = 0): Promise<EdgeRoutes> {
+    let path = `/admin/edge/routes`
+    if (windowMinutes > 0) {
+      path += `?window_minutes=${windowMinutes}`
+    }
+    const raw = await this.http.get<unknown>(path)
+    return toCamel<EdgeRoutes>(raw)
   }
 }
