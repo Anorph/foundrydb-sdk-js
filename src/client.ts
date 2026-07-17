@@ -11,6 +11,7 @@ import { EdgeAPI } from './edge.js'
 import { QueuesAPI } from './queues.js'
 import { FileServicesAPI } from './file-services.js'
 import { InferenceAPI } from './inference.js'
+import { InferenceServicesAPI } from './inference-services.js'
 import { DataPipelinesAPI } from './data-pipelines.js'
 import { EmbeddingPipelinesAPI } from './embedding-pipelines.js'
 import { WebhooksAPI } from './webhooks.js'
@@ -253,6 +254,7 @@ export class FoundryDB {
   readonly queues: QueuesAPI
   readonly fileServices: FileServicesAPI
   readonly inference: InferenceAPI
+  readonly inferenceServices: InferenceServicesAPI
   readonly dataPipelines: DataPipelinesAPI
   readonly embeddingPipelines: EmbeddingPipelinesAPI
   readonly webhooks: WebhooksAPI
@@ -275,6 +277,7 @@ export class FoundryDB {
     this.queues = new QueuesAPI(http)
     this.fileServices = new FileServicesAPI(http)
     this.inference = new InferenceAPI(http)
+    this.inferenceServices = new InferenceServicesAPI(http)
     this.dataPipelines = new DataPipelinesAPI(http)
     this.embeddingPipelines = new EmbeddingPipelinesAPI(http)
     this.webhooks = new WebhooksAPI(http)

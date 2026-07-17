@@ -1776,6 +1776,96 @@ export interface InferenceUsageOptions {
   groupBy?: string
 }
 
+// ---- Managed inference adapter types ----
+
+/**
+ * Lifecycle status of a LoRA fine-tuned adapter in the serving registry.
+ *
+ * - `uploaded`: the weights are in Files and the registry row exists, but it is
+ *   not yet loaded onto a GPU.
+ * - `active`: currently loaded into vLLM and serving. At most one active version
+ *   per service and served model.
+ * - `superseded`: replaced by a newer promoted version, kept so a rollback can
+ *   re-promote it.
+ * - `archived`: retired and no longer promotable.
+ */
+export type InferenceAdapterStatus = 'uploaded' | 'active' | 'superseded' | 'archived'
+
+/**
+ * One version of a customer LoRA fine-tuned adapter in the serving registry.
+ * The adapter is trained on the organization's data and its weights stored in
+ * Files (object storage); promoting it downloads the weights onto the base-model
+ * GPU, verifies their hash, and hot-loads them into vLLM. Once active, the
+ * service answers to the adapter as `foundrydb_managed/<served_model_name>` on
+ * the OpenAI-compatible endpoint. An adapter never leaves its owning
+ * organization's boundary.
+ */
+export interface InferenceModelAdapter {
+  id: string
+  /** The owning organization; an adapter is only servable on that organization's GPU. */
+  organizationId: string
+  /** The service currently serving this adapter. Null while the row is only uploaded and not yet promoted. */
+  inferenceServiceId?: string | null
+  /** The base model the adapter was trained against; promote rejects a mismatch with the service's model. */
+  baseModelId: string
+  /** The customer-facing name the adapter answers to in the OpenAI-wire model field (`foundrydb_managed/<served_model_name>`). */
+  servedModelName: string
+  /** Monotonic version per (organization, served model name). Rollback re-promotes a prior version. */
+  version: number
+  /** Files (object storage) bucket holding the adapter artifact. */
+  filesBucket: string
+  /** Files key prefix locating the adapter artifact within the bucket. */
+  filesKeyPrefix: string
+  /** Hash of the adapter weights, verified after download before loading so a tampered or partial artifact never serves. */
+  adapterSha256: string
+  /** Artifact size in bytes, used for the vLLM adapter slot and VRAM headroom budget. */
+  sizeBytes: number
+  /** The base-model license that travels with the weights; promote enforces its commercial-use terms. */
+  baseModelLicense?: string
+  /** Lifecycle state (`uploaded`, `active`, `superseded`, `archived`). */
+  status: InferenceAdapterStatus
+  createdAt: string
+  /** When the adapter last became active. Null until its first promote. */
+  promotedAt?: string | null
+  deletedAt?: string | null
+}
+
+/**
+ * Body for `InferenceServicesAPI.registerAdapter`. The producer (the
+ * fine-tuning workflow) sends it after uploading the LoRA adapter artifact to
+ * the organization's Files bucket, to record an uploaded, promotable version in
+ * the serving registry. The owning organization is resolved from the caller's
+ * auth, or from `organizationId` when set and the caller is a member of it; it
+ * is never trusted from the artifact.
+ */
+export interface InferenceAdapterRegisterRequest {
+  /**
+   * Register the adapter under a specific organization the caller belongs to (a
+   * platform admin may target any). Omit to use the caller's active organization.
+   */
+  organizationId?: string
+  /** The base model the adapter was trained against; it must later match the serving service's model id or Hugging Face repo. */
+  baseModelId: string
+  /**
+   * The customer-facing name the adapter answers to, becoming
+   * `foundrydb_managed/<served_model_name>`. Letters, digits, '.', '_' and '-'
+   * only, at most 128 characters.
+   */
+  servedModelName: string
+  /** Monotonic version per (organization, served model name); must be at least 1. */
+  version: number
+  /** The organization's Files bucket holding the adapter artifact. */
+  filesBucket: string
+  /** Files key prefix holding `adapter_model.safetensors` and `adapter_config.json`. */
+  filesKeyPrefix: string
+  /** The 64-character lowercase hex sha256 of `adapter_model.safetensors`, re-verified after download before loading. */
+  adapterSha256: string
+  /** The artifact size in bytes; must not be negative. */
+  sizeBytes: number
+  /** The base-model license that travels with the weights. Optional. */
+  baseModelLicense?: string
+}
+
 // ---- Data pipeline types ----
 
 /** Identifies a data pipeline topology. */

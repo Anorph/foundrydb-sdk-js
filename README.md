@@ -264,6 +264,42 @@ Supported frameworks:
 | `dora` | DORA (Digital Operational Resilience Act) evidence packet |
 | `eu_ai_act` | EU AI Act transparency evidence packet |
 
+### Managed Inference Adapters
+
+Manage the customer LoRA fine-tuned adapter registry for a managed inference service (an open-weight LLM served by vLLM on a dedicated GPU). Register an uploaded adapter version, then promote it to hot-load it into vLLM with no restart. All methods live on `client.inferenceServices`.
+
+```typescript
+// 1. After uploading the adapter artifact (adapter_model.safetensors +
+//    adapter_config.json) to the org's Files bucket, register the version.
+const adapter = await client.inferenceServices.registerAdapter({
+  baseModelId: 'mistral-small',
+  servedModelName: 'support-bot',
+  version: 3,
+  filesBucket: 'org-1-adapters',
+  filesKeyPrefix: 'support-bot/v3',
+  adapterSha256: '3b1e...<64 hex chars>',
+  sizeBytes: 104857600,
+  baseModelLicense: 'apache-2.0',
+})
+console.log(adapter.status) // 'uploaded' — not yet on a GPU
+
+// 2. List the versions relevant to a service: the ones bound to it (active +
+//    superseded history) plus the org's uploaded, not-yet-promoted versions
+//    trained on the service's base model.
+const adapters = await client.inferenceServices.listAdapters(serviceId)
+adapters.forEach(a => console.log(a.servedModelName, a.version, a.status))
+
+// 3. Promote a version onto the serving GPU. It becomes 'active' and any
+//    previously active version is marked 'superseded'.
+const active = await client.inferenceServices.promoteAdapter(serviceId, adapter.id)
+console.log(active.status, active.promotedAt) // 'active', <timestamp>
+
+// Rollback is the same call on a prior (superseded) version — no separate route.
+await client.inferenceServices.promoteAdapter(serviceId, previousAdapterId)
+```
+
+Once active, the service answers to the adapter as `foundrydb_managed/<served_model_name>` on its OpenAI-compatible endpoint.
+
 ## Error Handling
 
 All errors from the API throw a `FoundryDBError` with `statusCode` and `body` properties:

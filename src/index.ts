@@ -12,6 +12,8 @@ export { EdgeAPI } from './edge.js'
 export { QueuesAPI } from './queues.js'
 export { FileServicesAPI } from './file-services.js'
 export { InferenceAPI } from './inference.js'
+export { InferenceServicesAPI } from './inference-services.js'
+export type { InferenceServiceMethodOptions } from './inference-services.js'
 export { DataPipelinesAPI } from './data-pipelines.js'
 export { EmbeddingPipelinesAPI } from './embedding-pipelines.js'
 export { WebhooksAPI } from './webhooks.js'
@@ -101,6 +103,9 @@ export type {
   InferenceUsageRow,
   InferenceUsageSummary,
   InferenceUsageOptions,
+  InferenceAdapterStatus,
+  InferenceModelAdapter,
+  InferenceAdapterRegisterRequest,
   DataPipelineType,
   DataPipelineConfig,
   DataPipeline,
