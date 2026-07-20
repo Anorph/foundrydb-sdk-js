@@ -1,6 +1,6 @@
 {
   "name": "@foundrydb/sdk",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "JavaScript/TypeScript SDK for the FoundryDB managed database platform",
   "keywords": [
     "foundrydb",
@@ -48,9 +48,12 @@
       "^(.*)\\.js$": "$1"
     },
     "transform": {
-      "^.+\\.tsx?$": ["ts-jest", {
-        "tsconfig": "./tsconfig.test.json"
-      }]
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "tsconfig": "./tsconfig.test.json"
+        }
+      ]
     },
     "collectCoverageFrom": [
       "src/**/*.ts",

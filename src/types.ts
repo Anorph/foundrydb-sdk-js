@@ -1806,9 +1806,13 @@ export interface FilesAccessKey {
   organizationId?: string
   name: string
   accessKeyId: string
+  /** Empty for keys minted from a custom inlinePolicy. */
   prefix: string
-  /** 'read' | 'write' | 'readwrite' */
+  /** 'read' | 'write' | 'readwrite' | 'custom' ('custom' when scoped by inlinePolicy) */
   permissions: string
+  /** The custom policy the key was minted with, when created from a statement
+   * list rather than the prefix + permission shorthand. Absent for shorthand keys. */
+  inlinePolicy?: FilesKeyPolicy
   /** 'user' | 'attachment' */
   purpose: string
   /** 'active' | 'revoked' */
@@ -1827,12 +1831,37 @@ export interface FilesAccessKeyWithSecret extends FilesAccessKey {
   secretAccessKey: string
 }
 
-/** Body for minting a new access key. */
+/**
+ * One statement of a custom inline access-key policy. The client controls the
+ * effect, actions, and prefixes; the platform always scopes resource ARNs to
+ * the key's own bucket, so a statement can never reach another tenant's data.
+ */
+export interface FilesPolicyStatement {
+  /** 'Allow' | 'Deny' */
+  effect: string
+  /** S3 data-plane actions, e.g. 's3:GetObject', 's3:PutObject', 's3:ListBucket'. */
+  actions: string[]
+  /** Object key prefixes within the bucket this statement applies to. Empty = whole bucket. */
+  prefixes?: string[]
+}
+
+/** A custom inline policy: statements compiled into a bucket-scoped IAM document. */
+export interface FilesKeyPolicy {
+  statements: FilesPolicyStatement[]
+}
+
+/**
+ * Body for minting a new access key. Scope it with either the prefix +
+ * permissions shorthand or a custom `policy` (mutually exclusive).
+ */
 export interface CreateFilesAccessKeyRequest {
   name: string
+  /** Ignored when `policy` is set. */
   prefix?: string
-  /** 'read' | 'write' | 'readwrite' */
-  permissions: string
+  /** 'read' | 'write' | 'readwrite'. Required unless `policy` is set. */
+  permissions?: string
+  /** Custom inline policy; mutually exclusive with prefix + permissions. */
+  policy?: FilesKeyPolicy
 }
 
 /** Body for presigning one S3 operation. */
