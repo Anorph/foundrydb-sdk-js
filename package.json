@@ -1,6 +1,6 @@
 {
   "name": "@foundrydb/sdk",
-  "version": "0.2.0",
+  "version": "0.8.0",
   "description": "JavaScript/TypeScript SDK for the FoundryDB managed database platform",
   "keywords": [
     "foundrydb",
