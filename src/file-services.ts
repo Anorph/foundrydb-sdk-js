@@ -9,6 +9,8 @@ import type {
   PresignFilesUrlRequest,
   FilesPresignedUrl,
   FilesObjectPage,
+  FilesUsage,
+  FilesUsageOptions,
 } from './types.js'
 
 interface ListFilesServicesResponse {
@@ -33,6 +35,21 @@ export class FileServicesAPI {
     const raw = await this.http.get<unknown>('/file-services')
     const result = toCamel<ListFilesServicesResponse>(raw)
     return result.fileServices
+  }
+
+  /**
+   * Get storage-usage monitoring for a files service: the current footprint
+   * (bytes, object count, monthly cost) plus a storage-over-time series. Pass
+   * `range`/`granularity` to shape the series, or `live: true` for an
+   * up-to-the-second reading from the provider instead of the last tick.
+   */
+  async getUsage(serviceId: string, opts: FilesUsageOptions = {}): Promise<FilesUsage> {
+    const query: Record<string, string | undefined> = {}
+    if (opts.range) query['range'] = opts.range
+    if (opts.granularity) query['granularity'] = opts.granularity
+    if (opts.live) query['live'] = 'true'
+    const raw = await this.http.get<unknown>(`/file-services/${serviceId}/usage`, query)
+    return toCamel<FilesUsage>(raw)
   }
 
   /**

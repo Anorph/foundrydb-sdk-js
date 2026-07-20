@@ -1894,6 +1894,41 @@ export interface FilesObjectPage {
   nextCursor?: string
 }
 
+/** One time-bucketed sample of a bucket's storage footprint. */
+export interface FilesUsagePoint {
+  timestamp: string
+  bytes: number
+  objects: number
+}
+
+/** Point-in-time storage footprint of a files service. */
+export interface FilesUsageCurrent {
+  bytes: number
+  objects: number
+  measuredAt?: string
+  /** True when the figures came from an on-demand provider read, not the last tick. */
+  live: boolean
+  monthlyCostEur: number
+}
+
+/** Storage-usage payload: the current footprint plus an over-time series. */
+export interface FilesUsage {
+  current: FilesUsageCurrent
+  series: FilesUsagePoint[]
+  /** 'hour' | 'day' */
+  granularity: string
+}
+
+/** Options for a files usage query. All fields optional. */
+export interface FilesUsageOptions {
+  /** History window, e.g. '30d' or '24h' (default '30d'). */
+  range?: string
+  /** 'hour' | 'day'; omit to auto-select by window. */
+  granularity?: string
+  /** Read the current footprint on demand from the provider instead of the last tick. */
+  live?: boolean
+}
+
 // ---- Inference types ----
 
 /** API view of one configured AI provider for an organization. */
