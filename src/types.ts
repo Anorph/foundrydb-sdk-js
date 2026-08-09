@@ -1891,6 +1891,9 @@ export interface FilesObject {
 /** One page of a bucket listing. */
 export interface FilesObjectPage {
   objects: FilesObject[]
+  /** Common prefixes ("folders") under the current prefix, present when the
+   * request used a delimiter. Each ends with the delimiter. */
+  prefixes?: string[]
   nextCursor?: string
 }
 

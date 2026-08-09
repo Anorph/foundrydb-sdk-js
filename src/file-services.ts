@@ -159,11 +159,13 @@ export class FileServicesAPI {
     prefix = '',
     cursor = '',
     max = 0,
+    delimiter = '',
   ): Promise<FilesObjectPage> {
     const query: Record<string, string | number | undefined> = {}
     if (prefix) query['prefix'] = prefix
     if (cursor) query['cursor'] = cursor
     if (max > 0) query['max'] = max
+    if (delimiter) query['delimiter'] = delimiter
     const raw = await this.http.get<unknown>(`/file-services/${serviceId}/objects`, query)
     return toCamel<FilesObjectPage>(raw)
   }
