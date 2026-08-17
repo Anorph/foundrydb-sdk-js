@@ -12,6 +12,7 @@ export { EdgeAPI } from './edge.js'
 export { QueuesAPI } from './queues.js'
 export { FileServicesAPI } from './file-services.js'
 export { InferenceAPI } from './inference.js'
+export { InferenceServicesAPI } from './inference-services.js'
 export { DataPipelinesAPI } from './data-pipelines.js'
 export { EmbeddingPipelinesAPI } from './embedding-pipelines.js'
 export { WebhooksAPI } from './webhooks.js'
@@ -255,4 +256,39 @@ export type {
   Stack,
   PreviewStackRequest,
   LaunchStackRequest,
+  OrgInferenceFreeTierStatus,
+  InferenceChainOverride,
+  InferenceProviderChainInfo,
+  SetInferenceProviderChainRequest,
+  InferenceSku,
+  InferenceModelSource,
+  InferenceConfig,
+  InferenceService,
+  InferenceServiceRequest,
+  ListInferenceServicesResponse,
+  InferenceModelRateUnit,
+  InferenceModelRate,
+  ListInferenceModelRatesResponse,
+  ServerlessModelCapability,
+  ServerlessInferenceModel,
+  ListServerlessInferenceModelsResponse,
+  InferenceModelSwitchRequest,
+  InferenceFitLimitingFactor,
+  InferenceFitSuggestionKind,
+  InferenceFitCheckRequest,
+  InferenceFitSuggestion,
+  InferenceFitCheckResult,
+  InferenceServiceUsageTotals,
+  InferenceServiceUsagePoint,
+  InferenceServiceGpuHourCost,
+  InferenceServiceUsageMonthToDate,
+  InferenceServiceUsage,
+  InferenceGpuStats,
+  InferenceServerMetricsSnapshot,
+  InferenceServiceMetrics,
+  InferenceAdapterStatus,
+  InferenceModelAdapter,
+  ListInferenceServiceAdaptersResponse,
+  InferenceModelAdapterResponse,
+  InferenceAdapterRegisterRequest,
 } from './types.js'

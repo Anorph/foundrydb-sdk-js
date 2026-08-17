@@ -1967,6 +1967,12 @@ export interface InferenceKey {
   status: string
   tokensUsedCycle: number
   cycleMonth: string
+  /**
+   * The single inference service this key may call, or absent for an
+   * org-scoped key usable against any of the organization's inference
+   * services.
+   */
+  serviceId?: string
   createdAt: string
   revokedAt?: string
 }
@@ -1978,6 +1984,15 @@ export interface InferenceKey {
 export interface CreateInferenceKeyResult {
   key: InferenceKey
   secret: string
+  /**
+   * States when the secret starts working at the inference endpoint. The key
+   * hash reaches the data plane through an edge config reconcile that the mint
+   * requests immediately, so a request sent in the same breath as the mint can
+   * still answer `invalid_key` and should be retried shortly. It is advisory
+   * text rather than a status field, because the control plane cannot confirm
+   * per-node application at mint time.
+   */
+  activationNote: string
 }
 
 /** Body for minting a new data-plane key. */
@@ -1985,6 +2000,12 @@ export interface CreateInferenceKeyRequest {
   name: string
   monthlyTokenLimit: number
   rateLimitRpm?: number
+  /**
+   * Scopes the key to one inference service the organization owns, so the
+   * credential reaches that endpoint and no other. Omitted mints an org-scoped
+   * key usable against any of the organization's inference services.
+   */
+  serviceId?: string
 }
 
 /** Org-wide inference proxy policy. */
@@ -2016,12 +2037,47 @@ export interface InferenceUsageRow {
   costMicrocents: number
 }
 
+/**
+ * An organization's monthly free token allowance for platform-served
+ * (`foundrydb_managed`) inference, as it stands now. Tokens inside the
+ * allowance are metered exactly like paid tokens but recorded at zero cost, so
+ * the allowance is consumed before any billing starts.
+ *
+ * Only platform-served token calls draw on it. A call to the organization's own
+ * third-party provider is billed on that provider's account and costs the
+ * platform nothing, and an image generation is priced per image and reports no
+ * tokens, so neither consumes the allowance.
+ */
+export interface OrgInferenceFreeTierStatus {
+  /**
+   * First instant of the calendar month this standing describes. The allowance
+   * resets at each month boundary.
+   */
+  cycleMonth: string
+  /**
+   * The allowance for the month: the platform default unless an administrator
+   * set an override for this organization.
+   */
+  monthlyTokens: number
+  /** Allowance tokens drawn down so far this month. */
+  tokensUsed: number
+  /** Allowance tokens left this month. */
+  tokensRemaining: number
+}
+
 /** Aggregated inference usage for an organization. */
 export interface InferenceUsageSummary {
   from: string
   to: string
   groupBy: string
   rows: InferenceUsageRow[]
+  /**
+   * The organization's free allowance standing. It always describes the current
+   * calendar month regardless of the queried window, because the allowance is a
+   * monthly meter and not an aggregate of the window. Absent when the standing
+   * could not be read; the rows still answer.
+   */
+  freeTier?: OrgInferenceFreeTierStatus
 }
 
 /** Filters for `InferenceAPI.getUsage`. */
@@ -2032,6 +2088,721 @@ export interface InferenceUsageOptions {
   to?: string
   /** 'model' | 'key' */
   groupBy?: string
+}
+
+/**
+ * One platform AI surface's provider chain override. While it exists, that
+ * surface resolves through `providerChain` instead of the org-level chain.
+ */
+export interface InferenceChainOverride {
+  organizationId?: string
+  /** 'chat' | 'advisor' | 'embedding' | 'agent' | 'explainer' */
+  surface: string
+  providerChain: string[]
+  createdAt?: string
+  updatedAt?: string
+}
+
+/**
+ * The organization's provider chain configuration: the ordered chain, whether
+ * every provider in it routes EU-resident, and the per-surface overrides
+ * currently in place.
+ */
+export interface InferenceProviderChainInfo {
+  providerChain: string[]
+  fullyEuResident: boolean
+  overrides: InferenceChainOverride[]
+}
+
+/**
+ * Body for replacing a provider chain. Each entry is a provider identifier
+ * (`openai`, `anthropic`, `mistral`, `azure_openai`, `groq`,
+ * `foundrydb_managed`); the literal terminator `none` may close the chain to
+ * state that resolution stops there with no implicit platform fallback.
+ */
+export interface SetInferenceProviderChainRequest {
+  providerChain: string[]
+}
+
+// ---- Managed inference service types ----
+
+/**
+ * Selects how an inference service is placed.
+ *
+ * `dedicated` rents a whole-card GPU server for the tenant and bills per
+ * GPU-hour; it requires a GPU plan. `serverless` binds the service to a
+ * platform-owned shared pool and bills per token; it takes no plan.
+ */
+export type InferenceSku = 'dedicated' | 'serverless'
+
+/**
+ * Selects how a model's weights are obtained. `curated` is a blessed catalog
+ * model the platform has license-verified; `huggingface` is an on-demand pull
+ * by Hugging Face repo id, where the customer owns the license.
+ */
+export type InferenceModelSource = 'curated' | 'huggingface'
+
+/**
+ * Model selection and vLLM serving knobs for an inference service. For a
+ * curated model the platform resolves the repository, served name, and context
+ * length from the catalog. For a Hugging Face model, `modelId` is the org/name
+ * repo id and `servedModelName` is required.
+ */
+export interface InferenceConfig {
+  /**
+   * The catalog id for a curated model, or the Hugging Face repo id
+   * (`org/name`) for an on-demand pull.
+   */
+  modelId: string
+  modelSource: InferenceModelSource
+  /**
+   * The name the OpenAI-compatible endpoint reports and clients pass as the
+   * `model` field. Required for a Hugging Face model.
+   */
+  servedModelName?: string
+  /**
+   * The Hugging Face repository vLLM loads the weights from. Resolved by the
+   * platform for curated models.
+   */
+  hfRepo?: string
+  /**
+   * Authenticates pulls of gated repositories. Write-only: it is accepted on
+   * create and never returned by any response.
+   */
+  hfToken?: string
+  /** vLLM weight dtype (`auto`, `bfloat16`, `float16`). Absent means `auto`. */
+  dtype?: string
+  /**
+   * Caps the served context length. Absent or zero uses the catalog default
+   * (curated) or the model-derived maximum (Hugging Face).
+   */
+  maxModelLen?: number
+  /**
+   * The fraction of VRAM vLLM reserves for the KV cache. Absent or zero uses
+   * the platform default (0.90).
+   */
+  gpuMemoryUtilization?: number
+  /**
+   * Splits the model across N cards. Absent or zero uses 1; values above 1
+   * require a multi-card GPU plan and must divide the plan's card count.
+   */
+  tensorParallelSize?: number
+  /**
+   * The format the weights are served at for a Hugging Face model (`''` native,
+   * or `'fp8'`), shrinking the footprint so a larger model fits a smaller card.
+   * A curated model owns its quantization from the catalog and a request that
+   * sets this on one is refused.
+   */
+  quantization?: string
+  /**
+   * vLLM KV-cache quantization (`fp8`). Read-only: it is catalog-owned and
+   * never accepted from a create request.
+   */
+  kvCacheDtype?: string
+  /**
+   * Records that the license was accepted. Required before serving a
+   * conditional-commercial curated model or any Hugging Face model.
+   */
+  licenseAccepted?: boolean
+  /**
+   * Starts vLLM with LoRA adapter serving enabled so promoted adapters hot-load
+   * with no restart. Off by default, and a dedicated-only option: serverless
+   * refuses it.
+   */
+  enableFineTunedServing?: boolean
+  /** Bounds the concurrently-loaded adapters. Zero uses the platform default. */
+  maxLoras?: number
+  /** Bounds the adapter rank. Zero uses the platform default. */
+  maxLoraRank?: number
+  /**
+   * Auto-stops the service after this many minutes with no inference activity,
+   * ending the GPU-hour meter until it is started again (the weights stay on the
+   * data disk, so the restart is warm). Zero, the default, never auto-stops; any
+   * other value must be between 5 and 10080. Dedicated-only: serverless has no
+   * customer GPU to park, so it must be 0.
+   */
+  keepWarmMinutes?: number
+}
+
+/**
+ * A managed inference service: an open-weight LLM served by vLLM, on a
+ * whole-card GPU server (`inferenceSku` `dedicated`) or on a platform-owned
+ * shared pool (`inferenceSku` `serverless`). The `inferenceConfig` carries the
+ * resolved model configuration; its write-only `hfToken` is never returned.
+ */
+export interface InferenceService {
+  id: string
+  userId: string
+  organizationId?: string
+  name: string
+  serviceKind: string
+  status: string
+  zone: string
+  inferenceSku?: InferenceSku
+  planName: string
+  storageSizeGb?: number
+  storageTier?: string
+  nodeCount: number
+  inferenceConfig?: InferenceConfig
+  tlsEnabled: boolean
+  errorMessage?: string
+  createdAt: string
+  updatedAt: string
+  /**
+   * The service's own edge endpoint host, once provisioned. Absent until the
+   * endpoint is minted.
+   */
+  endpointHostname?: string
+  /**
+   * The complete OpenAI-compatible base URL to point an SDK at, so no client
+   * has to assemble a scheme, a host, and a `/v1` suffix of its own. It is
+   * `https://<endpointHostname>/v1` once the hostname is minted, and is always
+   * a platform address: it is never the upstream the platform forwards to,
+   * which is internal and not customer-reachable. Call it with an `fdb-inf` key
+   * and the model `foundrydb_managed/<servedModelName>`.
+   */
+  endpointBaseUrl?: string
+  /**
+   * The newest live provisioning heartbeat while a deploy is in flight (weight
+   * download progress, server start, the readiness wait). Absent once the
+   * service is Running or has terminally failed, so it is worth surfacing only
+   * while polling a create. Returned by `getService` only.
+   */
+  provisioningMessage?: string
+}
+
+/**
+ * Body for creating an inference service. Omit `planName` (or set
+ * `inferenceSku` to `serverless`) to bind to the platform shared pool. A GPU
+ * `planName` creates a dedicated whole-card GPU service.
+ */
+export interface InferenceServiceRequest {
+  name: string
+  /**
+   * Absent is inferred from `planName`: a GPU plan is dedicated, no plan is
+   * serverless. Combining `serverless` with a GPU plan, or `dedicated` with no
+   * plan, is refused.
+   */
+  inferenceSku?: InferenceSku
+  planName?: string
+  zone?: string
+  inferenceConfig: InferenceConfig
+  organizationId?: string
+}
+
+/** Envelope for the inference services listing. */
+export interface ListInferenceServicesResponse {
+  inferenceServices: InferenceService[]
+}
+
+/**
+ * What a published model rate charges per. `tokens` prices per token, carried
+ * in the two per-1K figures. `image` prices per generated image, carried in
+ * `imageMicrocentsPerUnit`, and the token figures are zero there.
+ */
+export type InferenceModelRateUnit = 'tokens' | 'image'
+
+/**
+ * One curated model's published price as it stands right now, the rate a
+ * serverless call on that model is metered at.
+ *
+ * The two per-1K field names keep the wire spelling of their trailing `1k`
+ * segment, which carries no case to convert.
+ */
+export interface InferenceModelRate {
+  /**
+   * The curated catalog id, the same id a create request carries in
+   * `InferenceConfig.modelId`.
+   */
+  modelId: string
+  /** An absent value reads as tokens. */
+  rateUnit: InferenceModelRateUnit
+  /**
+   * Prices the tokens sent to the model, in microcents per one thousand tokens.
+   * Divide by 100,000 for the currency amount per one million tokens. Zero on an
+   * image-priced rate.
+   */
+  promptMicrocentsPer_1k: number
+  /**
+   * Prices the tokens generated by the model, in microcents per one thousand
+   * tokens. Zero on an image-priced rate.
+   */
+  completionMicrocentsPer_1k: number
+  /**
+   * Prices one generated image. Divide by 100,000,000 for the currency amount
+   * per image. Absent on a token-priced rate.
+   */
+  imageMicrocentsPerUnit?: number
+  /**
+   * When this rate took effect, so a quote can date itself and a cached listing
+   * can tell one rate from its successor.
+   */
+  effectiveFrom: string
+}
+
+/** Envelope for the model rate card listing. */
+export interface ListInferenceModelRatesResponse {
+  models: InferenceModelRate[]
+}
+
+/** The surface a serverless model answers on. */
+export type ServerlessModelCapability = 'chat' | 'embeddings' | 'rerank' | 'image'
+
+/**
+ * One curated model a shared pool can answer for right now, and so one a
+ * serverless create can bind to. It describes the model, never the pool: pool
+ * ids, node counts, and serving URLs are not customer surface.
+ */
+export interface ServerlessInferenceModel {
+  /** The catalog id a create request carries in `InferenceConfig.modelId`. */
+  modelId: string
+  displayName: string
+  /**
+   * The surface the model answers on, so a picker can group and label its
+   * options.
+   */
+  capability: ServerlessModelCapability
+  /**
+   * Always true on a listed model: a model with no serving pool is omitted
+   * rather than listed as unavailable. The field is explicit so no client has to
+   * infer availability from the listing's mere existence.
+   */
+  serving: boolean
+  /**
+   * Marks a model whose weights are end of life upstream. It is still listed and
+   * still bindable, because a pool serves it and the customers already on it
+   * must keep working; treat it as retiring and do not make it a default choice.
+   */
+  deprecated: boolean
+}
+
+/** Envelope for the serverless model listing. */
+export interface ListServerlessInferenceModelsResponse {
+  models: ServerlessInferenceModel[]
+}
+
+/**
+ * Body for switching the model an inference service serves. The target is named
+ * by curated catalog id only: a Hugging Face source is not a switch target, and
+ * no other property of the service can be changed through it.
+ */
+export interface InferenceModelSwitchRequest {
+  /**
+   * The curated catalog id to switch to. It must differ from the model the
+   * service serves today and must fit the VRAM of the plan the service already
+   * runs on.
+   */
+  modelId: string
+  /**
+   * Accepts the target model's license. Required to be true when the target is a
+   * license-gated curated model, the same acceptance a create of that model
+   * demands. Ungated targets ignore it.
+   */
+  licenseAccepted?: boolean
+}
+
+/**
+ * The term of the fit equation that broke the plan's memory budget. `weights`
+ * means the weights alone exceed the budget, so no context length makes the
+ * configuration fit; `kv_cache` means the weights fit but the requested context
+ * length does not; `fits` is reported when the configuration fits.
+ */
+export type InferenceFitLimitingFactor = 'weights' | 'kv_cache' | 'fits'
+
+/**
+ * The shape of a proposed fix for a configuration that does not fit.
+ * `reduce_context` serves a shorter context on the same plan; `fp8_kv_cache`
+ * halves the KV cache instead of shortening the context; `larger_plan` moves to
+ * a bigger GPU plan.
+ */
+export type InferenceFitSuggestionKind = 'reduce_context' | 'fp8_kv_cache' | 'larger_plan'
+
+/**
+ * Body for the VRAM fit preflight: a model, optionally some serving knobs, and
+ * the GPU plan to test it against. Every optional field defaults exactly as a
+ * create would default it, so leaving them absent asks about the configuration a
+ * plain create produces.
+ */
+export interface InferenceFitCheckRequest {
+  modelSource: InferenceModelSource
+  /**
+   * The curated catalog id, or the Hugging Face repo id (`org/name`) whose
+   * config is fetched to size the model.
+   */
+  modelId: string
+  /** The GPU plan alias to test the model against. */
+  planName: string
+  /**
+   * The context length to size the KV cache at. Absent uses the catalog default
+   * (curated) or the model-derived maximum (Hugging Face).
+   */
+  maxModelLen?: number
+  /**
+   * The format the weights are served at (for example `fp8`, `awq`). Absent uses
+   * the checkpoint's own format.
+   */
+  quantization?: string
+  /** `auto` (the model dtype) or `fp8`, which halves the cache. */
+  kvCacheDtype?: string
+  /**
+   * The fraction of the plan's VRAM the budget is drawn from, between 0.10 and
+   * 0.99. Absent uses the platform default (0.90).
+   */
+  gpuMemoryUtilization?: number
+}
+
+/**
+ * One concrete way to make a refused configuration fit. Suggestions are only
+ * offered when they would actually work, so a weights-limited refusal never
+ * proposes trimming the context.
+ */
+export interface InferenceFitSuggestion {
+  kind: InferenceFitSuggestionKind
+  /** States the fix in caller language and is safe to show verbatim. */
+  detail: string
+  /** The plan to move to. Set on `larger_plan` only. */
+  planName?: string
+  /** The context length that would fit. Set on `reduce_context` only. */
+  maxModelLen?: number
+}
+
+/**
+ * The verdict of the VRAM fit preflight, the memory breakdown it was reached
+ * from, and the closest fixes when it is a refusal. All sizes are gibibytes of
+ * VRAM.
+ */
+export interface InferenceFitCheckResult {
+  /**
+   * Whether weights, KV cache, and overhead together stay within `budgetGb`.
+   */
+  fits: boolean
+  /** The model weights at the resolved dtype and quantization. */
+  weightsGb: number
+  /** The KV cache at the resolved context length and cache dtype. */
+  kvCacheGb: number
+  /**
+   * The fixed serving allowance (CUDA context, activations, the vLLM runtime).
+   * It does not vary with context length.
+   */
+  overheadGb: number
+  /** `planVramGb` times the effective memory utilization. */
+  budgetGb: number
+  /** The plan's total VRAM, before the utilization budget. */
+  planVramGb: number
+  /**
+   * The largest `maxModelLen` this plan would serve this model at. Zero when the
+   * weights alone exceed the budget.
+   */
+  maxContextThatFits: number
+  limitingFactor: InferenceFitLimitingFactor
+  /**
+   * The closest fixes, most relevant first. Empty when the configuration already
+   * fits.
+   */
+  suggestions: InferenceFitSuggestion[]
+}
+
+/** Usage counters rolled up across every bucket in the requested window. */
+export interface InferenceServiceUsageTotals {
+  calls: number
+  errors: number
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  costMicrocents: number
+  /**
+   * How many images the calls generated. It stays zero for a text model, which
+   * produces none; an image model meters images rather than output tokens, so it
+   * is the only usage figure that moves there.
+   */
+  images: number
+  avgLatencyMs: number
+  /**
+   * The 95th percentile latency across the window, the tail the slowest callers
+   * actually wait for. It is computed over the metered calls rather than folded
+   * up from the series, because a percentile is not summable. Zero when the
+   * window metered no calls.
+   */
+  p95LatencyMs: number
+  /** `errors / calls`, 0 when there are no calls. */
+  errorRate: number
+}
+
+/** One time bucket of usage. Empty buckets are omitted from the series. */
+export interface InferenceServiceUsagePoint {
+  bucketStart: string
+  calls: number
+  errors: number
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  costMicrocents: number
+  /** How many images the calls in this bucket generated; zero for a text model. */
+  images: number
+  avgLatencyMs: number
+  /** The 95th percentile latency within this bucket. */
+  p95LatencyMs: number
+}
+
+/**
+ * The accrued GPU-hour spend for a dedicated inference service over the usage
+ * window, in EUR. `costEur` is the summed spend, approximately
+ * `hourlyRateEur * billedHours`.
+ */
+export interface InferenceServiceGpuHourCost {
+  /** The number of hourly billing snapshots counted. */
+  billedHours: number
+  /** The most recent hourly rate. */
+  hourlyRateEur: number
+  costEur: number
+}
+
+/**
+ * One service's calendar-month-to-date rollup, independent of the window the
+ * caller asked for. Both charges sit on it so a client does not issue a second
+ * request per range change.
+ */
+export interface InferenceServiceUsageMonthToDate {
+  /**
+   * The accounting window start actually used: the first instant of the current
+   * UTC month, or the service's creation time when it is younger than the month,
+   * so a two-day-old service never claims a full month.
+   */
+  from: string
+  /**
+   * The metered per-token usage over that window, the charge for a serverless
+   * service.
+   */
+  tokens: InferenceServiceUsageTotals
+  /**
+   * The GPU-hour spend over that window, the charge for a dedicated service.
+   * Absent when billing has recorded no hour for it this month.
+   */
+  gpuHour?: InferenceServiceGpuHourCost
+}
+
+/**
+ * A service's metered usage over a window: rolled-up totals plus the ordered
+ * bucket series. Usage is attributed to the service's dedicated endpoint within
+ * the owning organization, so two services serving the same model never share
+ * each other's usage, and the window never starts before the service was
+ * created.
+ */
+export interface InferenceServiceUsage {
+  serviceId: string
+  from: string
+  to: string
+  bucketSeconds: number
+  totals: InferenceServiceUsageTotals
+  series: InferenceServiceUsagePoint[]
+  /**
+   * The real GPU-hour spend for a dedicated inference service, summed from the
+   * billing snapshots that charge it. A dedicated endpoint bills per GPU-hour
+   * while running, not per token, so this is the actual cost while
+   * `totals.costMicrocents` (per token) stays 0 for an in-house model. Absent
+   * when billing has not yet recorded an hour for the service.
+   */
+  gpuHour?: InferenceServiceGpuHourCost
+  /**
+   * The calendar-month rollup, which is what a bill is settled on and which the
+   * charted window (24 hours by default) cannot answer. It is unaffected by the
+   * requested window.
+   */
+  monthToDate?: InferenceServiceUsageMonthToDate
+}
+
+/**
+ * A single GPU's hardware telemetry sampled from `nvidia-smi` on the inference
+ * node. Memory is in mebibytes and power in watts.
+ */
+export interface InferenceGpuStats {
+  index: number
+  utilPercent: number
+  memUsedMb: number
+  memTotalMb: number
+  tempC: number
+  powerW: number
+}
+
+/**
+ * One sampled reading of a GPU inference node's live serving telemetry: the
+ * vLLM OpenAI server's own Prometheus metrics plus the node's GPU hardware
+ * counters. Token throughput and the average-latency fields are interval rates
+ * derived on the node from the delta between two consecutive scrapes; the first
+ * scrape after start reports zero for those derived fields.
+ */
+export interface InferenceServerMetricsSnapshot {
+  /** When the agent took this reading (UTC). */
+  collectedAt: string
+  /** The served model label vLLM reports on its metrics. */
+  modelName?: string
+  /**
+   * False when the vLLM `/metrics` endpoint could not be scraped this tick
+   * (still starting, crash-looping, or draining). The GPU fields may still be
+   * present in that case.
+   */
+  serverReachable: boolean
+  requestsRunning: number
+  requestsWaiting: number
+  /** Fraction (0 to 1) of KV cache blocks in use. */
+  gpuCacheUsagePerc: number
+  generationTokensPerSec: number
+  promptTokensPerSec: number
+  /** Average time to first token over the interval, in milliseconds. */
+  avgTtftMs: number
+  /** Average inter-token latency over the interval, in milliseconds. */
+  avgTpotMs: number
+  /** Average end-to-end request latency over the interval, in milliseconds. */
+  avgE2eLatencyMs: number
+  /** Cumulative successful request count (monotonic; charted as a delta). */
+  requestsSuccessTotal: number
+  /**
+   * One entry per physical GPU visible on the node (`nvidia-smi` order). Absent
+   * or empty when `nvidia-smi` is unavailable.
+   */
+  gpus?: InferenceGpuStats[]
+}
+
+/**
+ * The live-metrics payload for one inference service: the ordered snapshot
+ * series over the requested window plus the most recent snapshot for the
+ * realtime tiles. It is the live vLLM and GPU telemetry the inference node
+ * samples, distinct from the metered usage and cost.
+ */
+export interface InferenceServiceMetrics {
+  serviceId: string
+  from: string
+  to: string
+  snapshots: InferenceServerMetricsSnapshot[]
+  latest?: InferenceServerMetricsSnapshot
+}
+
+/**
+ * The lifecycle status of a LoRA fine-tuned adapter in the serving registry.
+ * `uploaded` means the weights are in Files and the registry row exists but it
+ * is not yet loaded onto a GPU; `active` means it is loaded into vLLM and
+ * serving; `superseded` means it was replaced by a newer promoted version and is
+ * kept so a rollback can re-promote it; `archived` means it is retired and no
+ * longer promotable.
+ */
+export type InferenceAdapterStatus = 'uploaded' | 'active' | 'superseded' | 'archived'
+
+/**
+ * One version of a customer LoRA fine-tuned adapter in the serving registry. The
+ * adapter is trained on the organization's data and its weights stored in Files
+ * (object storage); promoting it downloads the weights onto the base-model GPU,
+ * verifies their hash, and hot-loads them into vLLM. Once active, the service
+ * answers to the adapter as `foundrydb_managed/<servedModelName>` on the
+ * OpenAI-compatible endpoint. An adapter never leaves its owning organization's
+ * boundary.
+ */
+export interface InferenceModelAdapter {
+  id: string
+  /**
+   * The owning organization; an adapter is only servable on that organization's
+   * GPU.
+   */
+  organizationId: string
+  /**
+   * The service currently serving this adapter. Null while the row is only
+   * uploaded and not yet promoted.
+   */
+  inferenceServiceId?: string | null
+  /**
+   * The base model the adapter was trained against; promote rejects a mismatch
+   * with the service's model.
+   */
+  baseModelId: string
+  /**
+   * The customer-facing name the adapter answers to in the OpenAI-wire `model`
+   * field (`foundrydb_managed/<servedModelName>`).
+   */
+  servedModelName: string
+  /**
+   * Monotonic per organization and served model name. Rollback re-promotes a
+   * prior version.
+   */
+  version: number
+  /** Locates the adapter artifact in Files. */
+  filesBucket: string
+  /** Locates the adapter artifact in Files. */
+  filesKeyPrefix: string
+  /**
+   * The hash of the adapter weights, verified after download before loading so a
+   * tampered or partial artifact never serves.
+   */
+  adapterSha256: string
+  /**
+   * The artifact size, for the vLLM adapter slot and VRAM headroom budget.
+   */
+  sizeBytes: number
+  /**
+   * The base-model license that travels with the weights; promote enforces its
+   * commercial-use terms. Empty is allowed.
+   */
+  baseModelLicense?: string
+  status: InferenceAdapterStatus
+  createdAt: string
+  /** Set when the adapter last became active. Null until first promote. */
+  promotedAt?: string | null
+  deletedAt?: string | null
+}
+
+/** Envelope for the adapter listing. */
+export interface ListInferenceServiceAdaptersResponse {
+  adapters: InferenceModelAdapter[]
+}
+
+/** Envelope for a single-adapter response. */
+export interface InferenceModelAdapterResponse {
+  adapter: InferenceModelAdapter
+}
+
+/**
+ * Body for recording an uploaded LoRA fine-tuned adapter version in the serving
+ * registry. The producer (the fine-tuning workflow) sends it after uploading the
+ * adapter artifact to the organization's Files bucket. The owning organization
+ * is resolved from the caller's auth, or from `organizationId` when set and the
+ * caller is a member of it; it is never trusted from the artifact.
+ */
+export interface InferenceAdapterRegisterRequest {
+  /**
+   * Registers the adapter under a specific organization the caller belongs to (a
+   * platform admin may target any). Absent uses the caller's active
+   * organization.
+   */
+  organizationId?: string
+  /**
+   * The base model the adapter was trained against; it must later match the
+   * serving service's model id or Hugging Face repo.
+   */
+  baseModelId: string
+  /**
+   * The customer-facing name the adapter answers to, becoming
+   * `foundrydb_managed/<servedModelName>`. Letters, digits, `.`, `_` and `-`
+   * only, at most 128 characters.
+   */
+  servedModelName: string
+  /**
+   * Monotonic per (organization, served model name) and must be at least 1.
+   */
+  version: number
+  /** The organization's Files bucket holding the adapter artifact. */
+  filesBucket: string
+  /**
+   * The Files key prefix holding `adapter_model.safetensors` and
+   * `adapter_config.json`.
+   */
+  filesKeyPrefix: string
+  /**
+   * The 64-character lowercase hex sha256 of `adapter_model.safetensors`,
+   * re-verified after download before loading.
+   */
+  adapterSha256: string
+  /** The artifact size in bytes; must not be negative. */
+  sizeBytes: number
+  /** The base-model license that travels with the weights. Optional. */
+  baseModelLicense?: string
 }
 
 // ---- Data pipeline types ----

@@ -10,6 +10,9 @@ import type {
   UpdateOrgInferenceSettingsRequest,
   InferenceUsageSummary,
   InferenceUsageOptions,
+  InferenceChainOverride,
+  InferenceProviderChainInfo,
+  SetInferenceProviderChainRequest,
 } from './types.js'
 
 interface ListInferenceProvidersResponse {
@@ -95,7 +98,10 @@ export class InferenceAPI {
 
   /**
    * Mint a new data-plane key. The returned `secret` is shown exactly once;
-   * store it immediately, it cannot be retrieved again.
+   * store it immediately, it cannot be retrieved again. Set `req.serviceId` to
+   * scope the key to one inference service the organization owns. The key does
+   * not take effect at the inference endpoint the instant it is minted: read
+   * `activationNote` on the result before calling with it.
    */
   async createKey(
     orgId: string,
@@ -162,13 +168,85 @@ export class InferenceAPI {
     return toCamel<OrgInferenceSettings>(raw)
   }
 
+  // ---- Provider chain ----
+
+  /**
+   * Get the organization's ordered provider chain, its EU-residency verdict, and
+   * the per-surface overrides. Platform AI surfaces resolve their upstream
+   * through this chain unless a surface override replaces it.
+   */
+  async getProviderChain(orgId: string): Promise<InferenceProviderChainInfo> {
+    const raw = await this.http.get<unknown>(
+      `/organizations/${orgId}/inference/chain`,
+      undefined,
+      orgId,
+    )
+    return toCamel<InferenceProviderChainInfo>(raw)
+  }
+
+  /**
+   * Replace the organization's ordered provider chain wholesale. Each entry is a
+   * provider identifier (`openai`, `anthropic`, `mistral`, `azure_openai`,
+   * `groq`, `foundrydb_managed`); the literal terminator `none` may close the
+   * chain to state that resolution stops there with no implicit platform
+   * fallback. Entries must be unique and the terminator must be the final entry.
+   * Per-surface overrides are untouched and echoed back in the returned
+   * configuration.
+   */
+  async setProviderChain(
+    orgId: string,
+    chain: string[],
+  ): Promise<InferenceProviderChainInfo> {
+    const req: SetInferenceProviderChainRequest = { providerChain: chain }
+    const body = toSnake(req)
+    const raw = await this.http.put<unknown>(
+      `/organizations/${orgId}/inference/chain`,
+      body,
+      orgId,
+    )
+    return toCamel<InferenceProviderChainInfo>(raw)
+  }
+
+  /**
+   * Replace the provider chain for one platform AI surface (`chat`, `advisor`,
+   * `embedding`, `agent`, `explainer`). While the override exists, that surface
+   * resolves through it instead of the org-level chain.
+   */
+  async setSurfaceOverride(
+    orgId: string,
+    surface: string,
+    chain: string[],
+  ): Promise<InferenceChainOverride> {
+    const req: SetInferenceProviderChainRequest = { providerChain: chain }
+    const body = toSnake(req)
+    const raw = await this.http.put<unknown>(
+      `/organizations/${orgId}/inference/chain/overrides/${encodeURIComponent(surface)}`,
+      body,
+      orgId,
+    )
+    return toCamel<InferenceChainOverride>(raw)
+  }
+
+  /**
+   * Remove one surface's provider chain override so the org-level chain applies
+   * to it again. Deleting an absent override succeeds, so the call is idempotent.
+   */
+  async deleteSurfaceOverride(orgId: string, surface: string): Promise<void> {
+    await this.http.delete(
+      `/organizations/${orgId}/inference/chain/overrides/${encodeURIComponent(surface)}`,
+      orgId,
+    )
+  }
+
   // ---- Usage ----
 
   /**
    * Get aggregated inference usage for the organization. `opts.from` and
    * `opts.to` are RFC 3339 timestamps; `opts.groupBy` is `'model'` or
    * `'key'`. Empty opts fall back to the API defaults (current month, grouped
-   * by model).
+   * by model). The result carries `freeTier`, the organization's monthly free
+   * token allowance standing, which always describes the current calendar month
+   * regardless of the queried window.
    */
   async getUsage(orgId: string, opts: InferenceUsageOptions = {}): Promise<InferenceUsageSummary> {
     const query: Record<string, string | number | undefined> = {}

@@ -205,6 +205,82 @@ const settings = await client.edge.updateAppEdgeSettings(app.id, {
 console.log(settings.configVersion) // fleet converges on this version
 ```
 
+### Managed Inference Services
+
+Run an open-weight LLM behind an OpenAI-compatible endpoint on the service's own hostname. All methods live on `client.inferenceServices`.
+
+There are two SKUs. `serverless` multiplexes onto a platform-owned shared GPU pool, takes no plan, is limited to curated models a pool already serves, and bills per token. `dedicated` rents a whole-card GPU server, takes a GPU plan, serves curated or Hugging Face models, supports LoRA adapters and keep-warm, and bills per GPU-hour.
+
+```typescript
+// Ask what a serverless service can bind to, and what it costs
+const models = await client.inferenceServices.listServerlessModels()
+const rates = await client.inferenceServices.listModelRates()
+
+// Serverless: one curated model, no plan, no zone
+const cheap = await client.inferenceServices.createServerless(
+  'cheap-llm',
+  models[0].modelId,
+  'org_abc',
+  true, // licenseAccepted
+)
+
+// Dedicated: preflight the VRAM fit before renting a card
+const fit = await client.inferenceServices.checkFit({
+  modelSource: 'curated',
+  modelId: 'llama-3.1-8b-instruct',
+  planName: 'gpu-l40s-1',
+  maxModelLen: 16384,
+})
+if (!fit.fits) console.log(fit.limitingFactor, fit.suggestions)
+
+const svc = await client.inferenceServices.create({
+  name: 'my-llm',
+  planName: 'gpu-l40s-1',
+  zone: 'se-sto1',
+  inferenceConfig: {
+    modelId: 'llama-3.1-8b-instruct',
+    modelSource: 'curated',
+    licenseAccepted: true,
+    keepWarmMinutes: 30,
+  },
+})
+
+// Poll until it serves; get() returns null when the service does not exist
+const current = await client.inferenceServices.get(svc.id)
+console.log(current?.status, current?.endpointBaseUrl)
+
+// Metered usage and cost, and live vLLM + GPU telemetry
+const usage = await client.inferenceServices.getUsage(svc.id, '24h')
+console.log(usage?.monthToDate?.gpuHour?.costEur) // dedicated bills per GPU-hour
+const metrics = await client.inferenceServices.getMetrics(svc.id, '30m')
+console.log(metrics?.latest?.gpuCacheUsagePerc)
+
+// Switch the served model in place, keeping the endpoint and keys
+await client.inferenceServices.switchModel(svc.id, {
+  modelId: 'mistral-7b-instruct',
+  licenseAccepted: true,
+})
+
+// LoRA fine-tuned adapters
+const adapters = await client.inferenceServices.listAdapters(svc.id)
+await client.inferenceServices.promoteAdapter(svc.id, adapters![0].id)
+await client.inferenceServices.demoteAdapter(svc.id, adapters![0].id)
+
+await client.inferenceServices.delete(svc.id)
+```
+
+Call the endpoint with an `fdb-inf` key minted through `client.inference.createKey`, passing `serviceId` to scope the key to one service:
+
+```typescript
+const minted = await client.inference.createKey('org_abc', {
+  name: 'app key',
+  monthlyTokenLimit: 1_000_000,
+  serviceId: svc.id,
+})
+console.log(minted.secret)          // shown exactly once
+console.log(minted.activationNote)  // when the key starts working at the endpoint
+```
+
 ### Compliance Evidence Packets
 
 Generate cryptographically signed compliance evidence packets (SOC 2 and GDPR Art. 30 ROPA) for an organization. All methods live on `client.compliance`.
