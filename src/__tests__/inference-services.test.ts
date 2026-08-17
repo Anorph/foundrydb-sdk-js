@@ -456,8 +456,15 @@ describe('InferenceServicesAPI', () => {
         limiting_factor: 'kv_cache',
         suggestions: [
           { kind: 'reduce_context', detail: 'Serve 4096 tokens instead', max_model_len: 4096 },
-          { kind: 'larger_plan', detail: 'Move to gpu-l40s-1', plan_name: 'gpu-l40s-1' },
+          {
+            kind: 'larger_plan',
+            detail: 'Move to gpu-l40s-2, sharded across both cards',
+            plan_name: 'gpu-l40s-2',
+            tensor_parallel_size: 2,
+          },
         ],
+        recommended_plan: 'gpu-l40s-2',
+        recommended_tensor_parallel_size: 2,
       })
 
       const result: InferenceFitCheckResult = await makeApi().checkFit({
@@ -493,7 +500,36 @@ describe('InferenceServicesAPI', () => {
       expect(result.limitingFactor).toBe('kv_cache')
       expect(result.suggestions[0].kind).toBe('reduce_context')
       expect(result.suggestions[0].maxModelLen).toBe(4096)
-      expect(result.suggestions[1].planName).toBe('gpu-l40s-1')
+      expect(result.suggestions[0].tensorParallelSize).toBeUndefined()
+      expect(result.suggestions[1].planName).toBe('gpu-l40s-2')
+      expect(result.suggestions[1].tensorParallelSize).toBe(2)
+      expect(result.recommendedPlan).toBe('gpu-l40s-2')
+      expect(result.recommendedTensorParallelSize).toBe(2)
+    })
+
+    it('leaves the recommended plan undefined when no plan fits at all', async () => {
+      mockFetch({
+        fits: false,
+        weights_gb: 320,
+        kv_cache_gb: 0,
+        overhead_gb: 2.5,
+        budget_gb: 21.6,
+        plan_vram_gb: 24,
+        max_context_that_fits: 0,
+        limiting_factor: 'weights',
+        suggestions: [],
+      })
+
+      const result = await makeApi().checkFit({
+        modelSource: 'huggingface',
+        modelId: 'some-org/enormous-model',
+        planName: 'gpu-l4-1',
+      })
+
+      expect(result.limitingFactor).toBe('weights')
+      expect(result.suggestions).toEqual([])
+      expect(result.recommendedPlan).toBeUndefined()
+      expect(result.recommendedTensorParallelSize).toBeUndefined()
     })
   })
 

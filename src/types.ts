@@ -2464,6 +2464,13 @@ export interface InferenceFitSuggestion {
   planName?: string
   /** The context length that would fit. Set on `reduce_context` only. */
   maxModelLen?: number
+  /**
+   * The number of ranks the model must be sharded across for the remedy to fit.
+   * Present only when the fix needs a different shard count from the one asked
+   * for, which is how a multi-card plan is offered for a model that does not fit
+   * one card.
+   */
+  tensorParallelSize?: number
 }
 
 /**
@@ -2500,6 +2507,20 @@ export interface InferenceFitCheckResult {
    * fits.
    */
   suggestions: InferenceFitSuggestion[]
+  /**
+   * The smallest GPU plan on which this request fits, found through the same
+   * per-card equation as the verdict. It is answered whether or not the plan that
+   * was asked about fits, so a client can offer the fitting plan as the default
+   * rather than asking a customer to size a GPU themselves. Absent only when no
+   * plan in the registry fits this request at all.
+   */
+  recommendedPlan?: string
+  /**
+   * The shard count `recommendedPlan` needs. 1 when a single card of that plan
+   * holds the model; higher when the plan reaches the fit only by sharding across
+   * the cards it has. Absent with `recommendedPlan`.
+   */
+  recommendedTensorParallelSize?: number
 }
 
 /** Usage counters rolled up across every bucket in the requested window. */

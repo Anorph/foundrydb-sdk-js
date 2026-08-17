@@ -232,6 +232,10 @@ const fit = await client.inferenceServices.checkFit({
   maxModelLen: 16384,
 })
 if (!fit.fits) console.log(fit.limitingFactor, fit.suggestions)
+// The smallest plan that does fit, and the shard count it needs. Answered
+// whether or not the plan you asked about fits, so it can be offered as the
+// default rather than asking a customer to size a GPU themselves.
+console.log(fit.recommendedPlan, fit.recommendedTensorParallelSize)
 
 const svc = await client.inferenceServices.create({
   name: 'my-llm',
